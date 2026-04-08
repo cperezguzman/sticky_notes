@@ -21,7 +21,11 @@
 std::string get_last_edit(const sticky_note& sn, const std::string& choice) {
     auto now = std::chrono::system_clock::now();
 
-    auto duration = now - sn.last_edit;
+    auto duration = now - sn.last_edited;
+
+    std::chrono::year_month_day ymd{std::chrono::floor<std::chrono::days>(sn.last_edited)};
+
+    std::chrono::hh_mm_ss hms{std::chrono::floor<std::chrono::seconds>(sn.last_edited)};
 
     auto hours = std::chrono::duration_cast<std::chrono::hours>(duration);
 
@@ -36,21 +40,47 @@ std::string get_last_edit(const sticky_note& sn, const std::string& choice) {
     auto days = std::chrono::duration_cast<std::chrono::days>(duration);
 
     if (choice == "day_only" && (hours > 23)) {
-	return std::format("Days Elapsed: {} days", days.count());
+	return std::format("Last Edited: {} days ago", days.count());
     }
 
-    else if (choice == "month_only") {
-	
+    else if (choice == "month_only" && (days > 30)) {
+	return std::format("Last Edited: {} months ago", months.count());
     }
 
-    else if (choice == "year_only") {}
+    else if (choice == "year_only" && (months > 11)) {
+	return std::format("Last Edited: {} years ago", years.count());
+    }
 
-    else if (choice == "hour_only") {}
+    else if (choice == "hour_only" && (minutes > 59)) {
+	return std::format("Last Edited: {} hoursa ago", hours.count());
+    }
 
-    else if (choice == "minutes_only") {}
+    else if (choice == "minutes_only" && (seconds > 59)) {
+	return std::format("Last Edited: {} minutes ago", minutes.count()):
+    }
 
-    else if (choice == "seconds_only") {}
+    else if (choice == "seconds_only") {
+	return std::format("Last Edited: {} seconds ago", seconds.count());
+    }
 
-    else if (choice == "date") {}
+    else if (choice == "date_time") {
+	return std::format("Last Edited: {:%B %d, %Y at %I:%M %p}", sn.last_edited);
+    }
+}
 
-    else if (choice == "time") {}
+
+std::string get_created(const sticky_note& sn) {
+    return std::format("Created: {:%B %d, %Y at %I:%M %p}", sn.created);
+}
+
+void update_last_edit(sticky_note& sn) {
+    sn.last_edited = std::chrono::system_clock::now();
+}
+
+void change_title(sticky_note& sn, const std::string& title) {
+    sn.title = title;
+}
+
+void update_text(sticky_note& sn, const std::string& new_text) {
+    sn.text.push_back(new_text);
+}
