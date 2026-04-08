@@ -74,7 +74,26 @@ lets start off with a command-driven terminal editor
   the type of data structure needed to hold text (although this can change with more
   proficiency), how to insert/delete text, saving notes
 
-
+* list of commands:
+  - `write`
+    - the input of the user will be added to the body of text
+  - `erase <char/word> <n>`
+    - the user will have two options:
+      a) erase n words (detecting the first space or newline character from back to front to detect word)
+      b) erase n characters (user will enter extra integer input to decide how many characters)
+    - the default will be words
+  - `save`
+    - saves the current note
+  - `delete`
+    - deletes the current note
+  - `list`
+    - lists the notes made
+  - `open <note_name>`
+    - opens the note associated with inputted note_name
+  - `view <note_name>`
+    - prints out the contents of inputted note
+  - `quit`
+    - saves current note and quits the program 
 
 
 
@@ -92,7 +111,13 @@ Weekly Project Log:
 
 Week 1 (04/06/26)
 Description:
+* started the Sticky Note project
+* made git repo and remote branch
+* created sticky_note structure and some functions
+* started the project log
 
 Open-Problems:
+* 
 
 NW Goals:
+* 
