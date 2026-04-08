@@ -67,4 +67,32 @@ functions can be:
 * updates the last_edited time
 * something that creates/modifies title of SN
 * can insert/delete from the vector of strings (modifying the notes as the user does it)
-* 
+
+3)
+lets start off with a command-driven terminal editor
+* this'll make it manageable and let me focus on the fundamentals of an editor which is
+  the type of data structure needed to hold text (although this can change with more
+  proficiency), how to insert/delete text, saving notes
+
+
+
+
+
+
+
+
+
+
+
+
+Weekly Project Log:
+- short description of completed work
+- list of open problems
+- list of next-week goals
+
+Week 1 (04/06/26)
+Description:
+
+Open-Problems:
+
+NW Goals:
