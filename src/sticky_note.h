@@ -11,6 +11,7 @@ struct sticky_note {
     std::chrono::time_point<std::chrono::system_clock> created = std::chrono::system_clock::now();
     std::chrono::time_point<std::chrono::system_clock> last_edited = created;
     std::string title;
+    std::string note_path;
 
 };
 
@@ -20,7 +21,7 @@ std::string get_created(const sticky_note& sn);
 
 void update_last_edit(sticky_note& sn);
 
-void change_title(sticky_note& sn, const std::string& title);
+void set_title(sticky_note& sn, const std::string& title);
 
 void update_text(sticky_note& sn);
 

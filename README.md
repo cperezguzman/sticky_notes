@@ -95,7 +95,10 @@ lets start off with a command-driven terminal editor
   - `quit`
     - saves current note and quits the program 
 
-
+4)
+im making it so when a user starts the program, it gives them two options: one to create and one to open a note
+this way i dont have to automatically create a new note everytime the user starts the program.
+if the user is opening a note, i need to figure out what should be used to locate the wanted file.
 
 
 
@@ -117,7 +120,7 @@ Description:
 * started the project log
 
 Open-Problems:
-* 
+* how to create a file from within the program (instead of having the user already have one created to save into)
 
 NW Goals:
 * 

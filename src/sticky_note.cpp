@@ -77,7 +77,7 @@ void update_last_edit(sticky_note& sn) {
     sn.last_edited = std::chrono::system_clock::now();
 }
 
-void change_title(sticky_note& sn, const std::string& title) {
+void set_title(sticky_note& sn, const std::string& title) {
     sn.title = title;
 }
 
