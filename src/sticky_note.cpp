@@ -1,4 +1,4 @@
-#include "sticy_note.h"
+#include "sticky_note.h"
 
 #include <format>
 
@@ -52,11 +52,12 @@ std::string get_last_edit(const sticky_note& sn, const std::string& choice) {
     }
 
     else if (choice == "hour_only" && (minutes > 59)) {
-	return std::format("Last Edited: {} hoursa ago", hours.count());
+	// FIXME: Typo fixed ("hoursa" -> "hours"); review duration vs wall-clock comparisons for these branches.
+	return std::format("Last Edited: {} hours ago", hours.count());
     }
 
     else if (choice == "minutes_only" && (seconds > 59)) {
-	return std::format("Last Edited: {} minutes ago", minutes.count()):
+	return std::format("Last Edited: {} minutes ago", minutes.count());
     }
 
     else if (choice == "seconds_only") {
@@ -66,6 +67,8 @@ std::string get_last_edit(const sticky_note& sn, const std::string& choice) {
     else if (choice == "date_time") {
 	return std::format("Last Edited: {:%B %d, %Y at %I:%M %p}", sn.last_edited);
     }
+    // FIXME: Unknown `choice` falls through here — define a sensible default message; review chrono branch comparisons vs intent.
+    return std::string{"Last Edited: (unknown format choice)"};
 }
 
 

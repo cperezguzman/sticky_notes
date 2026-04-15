@@ -23,6 +23,6 @@ void update_last_edit(sticky_note& sn);
 
 void set_title(sticky_note& sn, const std::string& title);
 
-void update_text(sticky_note& sn);
+void update_text(sticky_note& sn, const std::string& new_text);
 
 #endif

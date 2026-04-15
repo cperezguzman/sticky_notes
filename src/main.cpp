@@ -1,8 +1,12 @@
 #include "sticky_note.h"
+#include "parser.h"
 
 #include <filesystem>
 #include <iostream>
 #include <fstream>
+#include <map>
+#include <unordered_map>
+#include <string>
 
 using std::string;
 using std::getline;
@@ -11,16 +15,17 @@ using std::cin;
 using std::vector;
 
 void print_usage() {
-  std::cout << "This is the command list the user can use:\n";
-       	    << "write <text user wants to insert>		the input of the user will be added to the body of text\n";
-	    << "erase <char/word> <n>				erase the last n characters or words of the most recent input line (default is word and 1)\n";
-	    << "save						saves the current note\n";
-	    << "delete						deletes the current note\n";
-	    << "create						creates new note\n";
-	    << "list						lists the notes made\n";
-	    << "open <note_name>				opens a note\n";
-            << "view <note_name>				prints out the contents of a note\n";
-            << "quit						saves the current note and quits the program";
+  // FIXME: Keep help text in sync with parser + dispatch (command names and arguments).
+  std::cout << "This is the command list the user can use:\n"
+	    << "write <text user wants to insert>		the input of the user will be added to the body of text\n"
+	    << "erase <char/word> <n>				erase the last n characters or words of the most recent input line (default is word and 1)\n"
+	    << "save						saves the current note\n"
+	    << "delete						deletes the current note\n"
+	    << "create						creates new note\n"
+	    << "list						lists the notes made\n"
+	    << "open <note_name>				opens a note\n"
+            << "view <note_name>				prints out the contents of a note\n"
+            << "quit						saves the current note and quits the program\n"
 	    << "help						prints out this command menu\n";
 }
 
@@ -33,9 +38,9 @@ void set_noteid(sticky_note& sn, string& count) {
 
     sn.id = std::stoi(count);
 
-    std::ofstream out("notes/next_note_id.txt");
-    out << (sn.id + 1);
-    out.close();
+    std::ofstream counter_out("notes/next_note_id.txt");
+    counter_out << (sn.id + 1);
+    counter_out.close();
 }
 
 sticky_note create_note(bool first_time) {
@@ -43,7 +48,7 @@ sticky_note create_note(bool first_time) {
 
 
     if (first_time) {
-	cout << "Welcome to Sticky_Note.V1 [Terminal Draft]! This is my starter sticky note project.\n";
+	cout << "Welcome to Sticky_Note.V1 [Terminal Draft]! This is my starter sticky note project.\n"
 	     << "Since it appears to be your first time using this program, I'll automatically create a note for you.\n";
     }
 
@@ -64,17 +69,25 @@ sticky_note create_note(bool first_time) {
 
     set_noteid(sn, count);
 
+    std::ofstream out(sn.note_path);
+    out << "ID: " << sn.id << "\n";
+    out << "Title: " << sn.title << "\n";
+    out << "Created: " << sn.created << "\n";
+    out << "Last Edited: " << sn.last_edited;
+    // FIXME: On-disk format should match parse_file_info (same line layout / keys). Consider serializing timestamps with get_created / get_last_edit, not raw time_point <<.
+
     return sn;
 }
 
-void write_into_note(sticky_note& sn, vector& fields) {
+void write_to_note(sticky_note& sn, const std::vector<std::string>& fields) {
     sn.text.push_back(fields[1]);
 }
 
-void erase_from_note(sticky_note& sn, vector& fields) {
+void erase_from_note(sticky_note& sn, const std::vector<std::string>& fields) {
     if (sn.text.empty()) {
 	cout << "Error: Nothing to erase yet. Please enter another command.\n";
-	continue;
+	// FIXME: Caller (main) may want to distinguish failure vs success; consider bool return instead of silent return.
+	return;
     }
 
     if (fields.size() == 1) {
@@ -91,13 +104,15 @@ void erase_from_note(sticky_note& sn, vector& fields) {
 	}
 
 	else if (fields.size() == 3) {
-	    sn.text.back().resize(sn.text.back().size() - fields[2]);
+	    // FIXME: Validate stoi result, bounds vs line length, handle exceptions from stoi.
+	    const int n_chars = std::stoi(fields[2]);
+	    sn.text.back().resize(sn.text.back().size() - static_cast<std::size_t>(n_chars));
 	    cout << "The last " << fields[2] << "characters have been deleted.\n";
 	}
 
 	else {
 	    cout << "Error: Too many arguments passed for the 'erase' command. Please try again.\n";
-	    continue;
+	    return;
 	}
     }
 
@@ -111,7 +126,9 @@ void erase_from_note(sticky_note& sn, vector& fields) {
 	}
 
 	else if (fields.size() == 3) {
-	    for (int i = 0; i < fields[2]; i++) {
+	    // FIXME: Validate stoi / bounds (empty line, word count).
+	    const int n_words = std::stoi(fields[2]);
+	    for (int i = 0; i < n_words; i++) {
 		while (sn.text.back().back() != ' ') {
 		    sn.text.back().pop_back();
 		}
@@ -123,13 +140,42 @@ void erase_from_note(sticky_note& sn, vector& fields) {
 
 	else {
 	    cout << "Error: Too many arguments passed for the 'erase' command. Please try again.\n";
-	    continue;
+	    return;
 	}
     }
 }
 
+// TODO: CONTINUE THIS FUNCTION AFTER MAKING THE LIST ONE
 void open_note() {
-    cout << "Please enter the note title 
+    // FIXME: Finish implementation: prompt, resolve note file, load into a sticky_note / update main's current note.
+    cout << "Please enter the note title\n";
+}
+
+// TODO: CONTINUE THIS FUNCTION AFTER MAKING THE PARSER
+void list_notes() {
+    std::map<int, string> file_listing; // contains the id --> note title
+    std::unordered_map<int, string> file_address; // contains the id --> filename
+    // FIXME: Skip helper files (e.g. next_note_id.txt) so you only parse real note files.
+
+    for (const auto& entry : std::filesystem::directory_iterator("notes")) {
+	if (std::filesystem::is_regular_file(entry.path())) {
+	    std::ifstream in(entry.path());
+	    bool ok = true;
+	    std::vector<std::string> file_info = parse_file_info(in, ok);
+
+	    // FIXME: Guard `ok` and `file_info.size()` before indexing; use std::stoi and catch/validate id string.
+	    string title = file_info[0];
+	    int note_id = std::stoi(file_info[1]);
+
+	    file_listing[note_id] = title;
+	    file_address[note_id] = entry.path().string();
+    	}
+    }
+
+    for (const auto& n : file_listing) {
+	cout << n.first << " : " << n.second << "\n";
+    }
+
 }
 
 int main() {
@@ -141,21 +187,26 @@ int main() {
     }
 
     string note_num;
-    std::ifstream in("notes/next_note_id.txt");
     getline(in, note_num);
 
-    bool first_time;
-    if (note_num == "0") {first_time = true;}
-
+    const bool first_time = (note_num == "0");
     string choice;
-    if (first_time) {sticky_note sn = create_note(first_time);}
-    else {
-	cout << "Welcome back. Would you like to open a note or create a note. (open/create): \n";
-        cin >> choice;
-    }
+    sticky_note sn{};
 
-    if (choice == "open") {
-	open_note();
+    if (first_time) {
+	sn = create_note(true);
+    } else {
+	cout << "Welcome back. Would you like to open a note or create a note. (open/create): \n";
+	// FIXME: Mixing `cin >>` with `getline` for commands — use `std::getline` for choice or `std::cin >> std::ws` / `ignore` before the command loop.
+	cin >> choice;
+	if (choice == "open") {
+	    list_notes();
+	    open_note();
+	    // FIXME: open_note() does not load parsed data into `sn` yet — current note state is still default until you implement load.
+	} else if (choice == "create") {
+	    sn = create_note(false);
+	}
+	// FIXME: Else branch for invalid choice; ensure `sn` is loaded for all non-first_time paths you care about.
     }
 
     print_usage();
@@ -173,16 +224,15 @@ int main() {
 
         std::vector<std::string> fields = parse_command(command);
 
-	if (fields[0] == "write " {write_to_note(sn
+	if (fields[0] == "write") {write_to_note(sn, fields);}
 
-	else if (fields[0] == "erase") {
-	    
-	}
+	else if (fields[0] == "erase") {erase_from_note(sn, fields);}
 
 	else if (fields[0] == "save") {
 	    std::ofstream out(sn.note_path);
 
-	    for (const auto& t : text) {
+	    // FIXME: Save should match your agreed on-disk format (metadata + body), not only raw lines, if loaders expect headers.
+	    for (const auto& t : sn.text) {
 		out << t << "\n";
 	    }
 
@@ -192,7 +242,7 @@ int main() {
 	else if (fields[0] == "delete") {
 	    string choice;
 
-	    cout << "This will permanently delete this note from memory.\n";
+	    cout << "This will permanently delete this note from memory.\n"
 	         << "Are you sure? (y/n): ";
 	    cin >> choice;
 
@@ -204,7 +254,8 @@ int main() {
 	    }
 
 	    if (choice == "y") {
-		std::filesystem::remove(path);
+		// FIXME: Decide policy: remove file only, clear `sn`, switch to another note, or exit program — current code exits after delete.
+		std::filesystem::remove(sn.note_path);
 		while (!sn.text.empty()) {
 		    sn.text.pop_back();
 		}
@@ -220,7 +271,8 @@ int main() {
 	}
 
 	else if (fields[0] == "create") {
-	    sticky_note create_note();
+	    // FIXME: Creating mid-session may need to save/close the previous note first; confirm ID/path/counter rules.
+	    sn = create_note(false);
         }
 
 
@@ -250,3 +302,7 @@ int main() {
 	}
 
 	else if (fields[0] == "help") {print_usage();}
+
+	// FIXME: Optional: `else` branch for unknown commands so the user gets feedback.
+    }
+}
