@@ -68,7 +68,7 @@ std::string get_last_edit(const sticky_note& sn, const std::string& choice) {
 	return std::format("Last Edited: {:%B %d, %Y at %I:%M %p}", sn.last_edited);
     }
     // FIXME: Unknown `choice` falls through here — define a sensible default message; review chrono branch comparisons vs intent.
-    return std::string{"Last Edited: (unknown format choice)"};
+    return std::format("Last Edited: {:%B %d, %Y at %I:%M %p}", sn.last_edited);
 }
 
 

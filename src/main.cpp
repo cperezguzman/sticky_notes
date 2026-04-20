@@ -70,17 +70,22 @@ sticky_note create_note(bool first_time) {
     set_noteid(sn, count);
 
     std::ofstream out(sn.note_path);
-    out << "ID: " << sn.id << "\n";
-    out << "Title: " << sn.title << "\n";
-    out << "Created: " << sn.created << "\n";
-    out << "Last Edited: " << sn.last_edited;
-    // FIXME: On-disk format should match parse_file_info (same line layout / keys). Consider serializing timestamps with get_created / get_last_edit, not raw time_point <<.
+
+    out << "Title:\n" << sn.title << "\n";
+    out << "ID:\n" << sn.id << "\n";
+    out << "Created:\n" << get_created(sn) << "\n";
+    out << "Last Edited:\n" << get_last_edit(sn, "date_time") << "\n";
+    out << "Body:\n";
+    for (const auto& t : sn.text) {
+	out << t << "\n";
+    }
 
     return sn;
 }
 
 void write_to_note(sticky_note& sn, const std::vector<std::string>& fields) {
     sn.text.push_back(fields[1]);
+    update_last_edit(sn);
 }
 
 void erase_from_note(sticky_note& sn, const std::vector<std::string>& fields) {
@@ -155,21 +160,32 @@ void open_note() {
 void list_notes() {
     std::map<int, string> file_listing; // contains the id --> note title
     std::unordered_map<int, string> file_address; // contains the id --> filename
-    // FIXME: Skip helper files (e.g. next_note_id.txt) so you only parse real note files.
-
     for (const auto& entry : std::filesystem::directory_iterator("notes")) {
-	if (std::filesystem::is_regular_file(entry.path())) {
-	    std::ifstream in(entry.path());
-	    bool ok = true;
-	    std::vector<std::string> file_info = parse_file_info(in, ok);
 
-	    // FIXME: Guard `ok` and `file_info.size()` before indexing; use std::stoi and catch/validate id string.
-	    string title = file_info[0];
-	    int note_id = std::stoi(file_info[1]);
+        if (!std::filesystem::is_regular_file(entry.path())) {continue;}
 
-	    file_listing[note_id] = title;
-	    file_address[note_id] = entry.path().string();
-    	}
+	if (entry.path().extension() != ".txt") {continue;}
+
+        if (!entry.path().stem().string().starts_with("note_")) {continue;}
+
+	std::ifstream in(entry.path());
+        bool ok = true;
+        std::vector<std::string> file_info = parse_file_info(in, ok);
+
+	if (!ok) {continue;}
+	if (file_info.size() < 2 || file_info[1].empty()) {continue;}
+
+	int note_id = 0;
+	try {
+	    note_id = std::stoi(file_info[1]);
+	} catch (const std::exception&) {
+	    continue;
+	}
+
+        const string& title = file_info[0];
+
+        file_listing[note_id] = title;
+        file_address[note_id] = entry.path().string();
     }
 
     for (const auto& n : file_listing) {
@@ -224,14 +240,25 @@ int main() {
 
         std::vector<std::string> fields = parse_command(command);
 
-	if (fields[0] == "write") {write_to_note(sn, fields);}
+	if (fields[0] == "write") {
+	    if (fields.size() < 2) {
+		cout << "Error: write needs text on the same line.\n";
+		continue;
+	    }
+	    write_to_note(sn, fields);
+	}
 
 	else if (fields[0] == "erase") {erase_from_note(sn, fields);}
 
 	else if (fields[0] == "save") {
 	    std::ofstream out(sn.note_path);
 
-	    // FIXME: Save should match your agreed on-disk format (metadata + body), not only raw lines, if loaders expect headers.
+	    out << "Title:\n" << sn.title << "\n";
+	    out << "ID:\n" << sn.id << "\n";
+	    out << "Created:\n" << get_created(sn) << "\n";
+	    out << "Last Edited:\n" << get_last_edit(sn, "date_time") << "\n";
+	    out << "Body:\n";
+
 	    for (const auto& t : sn.text) {
 		out << t << "\n";
 	    }
