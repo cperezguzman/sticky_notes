@@ -8,18 +8,24 @@
 using std::getline;
 
 namespace {
-    std::string trim(const std::string& command) {
-	auto start = command.find_first_not_of(" \t");
-	if (start == std::string::npos) {return "";}
-	auto end = command.find_last_not_of(" \t");
-	return command.substr(start, (end - start) + 1);
+std::string trim(const std::string& command) {
+    auto start = command.find_first_not_of(" \t");
+    if (start == std::string::npos) {
+	return "";
     }
+    auto end = command.find_last_not_of(" \t");
+    return command.substr(start, (end - start) + 1);
+}
 
-    void strip_trailing_cr(std::string& s) {
-	if (!s.empty() && s.back() == '\r') {
-	    s.pop_back();
-	}
+void strip_trailing_cr(std::string& s) {
+    if (!s.empty() && s.back() == '\r') {
+	s.pop_back();
     }
+}
+} // namespace
+
+static bool takes_rest_of_line(const std::string& verb) {
+    return verb == "write" || verb == "view" || verb == "open";
 }
 
 std::vector<std::string> parse_command(const std::string& command) {
@@ -32,7 +38,7 @@ std::vector<std::string> parse_command(const std::string& command) {
 
     fields.push_back(part);
 
-    if (fields[0] == "write") {
+    if (takes_rest_of_line(fields[0])) {
 	getline(iss, part);
 	const std::string body = trim(part);
 	if (!body.empty()) {
@@ -40,15 +46,19 @@ std::vector<std::string> parse_command(const std::string& command) {
 	}
     } else {
 	while (getline(iss, part, ' ')) {
-	    fields.push_back(part);
+	    if (!part.empty()) {
+		fields.push_back(part);
+	    }
 	}
     }
 
     return fields;
 }
 
-// Parses note files from create/save: sections Title, ID, Created, Last Edited, Body (Body last;
-// blank lines between sections ignored). Returns [0] title … [4] body (may contain newlines).
+// Parses a note file written by create/save: stream order must be section labels
+// Title:, ID:, Created:, Last Edited:, Body: (each followed by its value line; Body
+// consumes the remainder of the file). Blank lines before a label are ignored.
+// Returns: [0] title, [1] id, [2] created line, [3] last edited line, [4] body.
 std::vector<std::string> parse_file_info(std::ifstream& file, bool& ok) {
     ok = true;
     std::vector<std::string> fields;

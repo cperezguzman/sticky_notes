@@ -2,30 +2,10 @@
 
 #include <format>
 
-//std::string get_last_edit_date(const sticky_note& sn) {
-//    auto timestamp = sn.last_edited;
-
-//    std::chrono::year_month_day ymd{std::chrono::floor<std::chrono::days>(timestamp)};
-
-//    std::string date = std::format("{:%B %d, %Y}", ymd);
-
-//    return date;
-//}
-
-//std::string get_last_edit_time(const sticky_note& sn) {
-//    auto now = std::chrono::system_clock::now();
-
-//    std::chrono::hh_mm_ss hms{now - 
-
-
 std::string get_last_edit(const sticky_note& sn, const std::string& choice) {
     auto now = std::chrono::system_clock::now();
 
     auto duration = now - sn.last_edited;
-
-    std::chrono::year_month_day ymd{std::chrono::floor<std::chrono::days>(sn.last_edited)};
-
-    std::chrono::hh_mm_ss hms{std::chrono::floor<std::chrono::seconds>(sn.last_edited)};
 
     auto hours = std::chrono::duration_cast<std::chrono::hours>(duration);
 
@@ -39,24 +19,23 @@ std::string get_last_edit(const sticky_note& sn, const std::string& choice) {
 
     auto days = std::chrono::duration_cast<std::chrono::days>(duration);
 
-    if (choice == "day_only" && (hours > 23)) {
+    if (choice == "day_only" && hours > std::chrono::hours{23}) {
 	return std::format("Last Edited: {} days ago", days.count());
     }
 
-    else if (choice == "month_only" && (days > 30)) {
+    else if (choice == "month_only" && days > std::chrono::days{30}) {
 	return std::format("Last Edited: {} months ago", months.count());
     }
 
-    else if (choice == "year_only" && (months > 11)) {
+    else if (choice == "year_only" && months > std::chrono::months{11}) {
 	return std::format("Last Edited: {} years ago", years.count());
     }
 
-    else if (choice == "hour_only" && (minutes > 59)) {
-	// FIXME: Typo fixed ("hoursa" -> "hours"); review duration vs wall-clock comparisons for these branches.
+    else if (choice == "hour_only" && minutes > std::chrono::minutes{59}) {
 	return std::format("Last Edited: {} hours ago", hours.count());
     }
 
-    else if (choice == "minutes_only" && (seconds > 59)) {
+    else if (choice == "minutes_only" && seconds > std::chrono::seconds{59}) {
 	return std::format("Last Edited: {} minutes ago", minutes.count());
     }
 
@@ -67,10 +46,9 @@ std::string get_last_edit(const sticky_note& sn, const std::string& choice) {
     else if (choice == "date_time") {
 	return std::format("Last Edited: {:%B %d, %Y at %I:%M %p}", sn.last_edited);
     }
-    // FIXME: Unknown `choice` falls through here — define a sensible default message; review chrono branch comparisons vs intent.
+
     return std::format("Last Edited: {:%B %d, %Y at %I:%M %p}", sn.last_edited);
 }
-
 
 std::string get_created(const sticky_note& sn) {
     return std::format("Created: {:%B %d, %Y at %I:%M %p}", sn.created);
