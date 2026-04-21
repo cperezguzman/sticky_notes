@@ -78,6 +78,4 @@ Makefile
 - **Titles** for `open` / `view` must match **exactly** (whitespace matters after trimming user input in some prompts).
 - No GUI, undo stack, or rich text—by design for this version.
 
-## License
 
-Add a license file if you distribute the project; none is set here by default.
