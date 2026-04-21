@@ -1,126 +1,83 @@
-Building a personal sticky notes-like app for ubuntu
+# Sticky Notes (terminal)
 
-sticky notes --> SN
-cut off by another thought --> XXXXX
+A small **C++20** command-line note editor. Notes are **plain text files** under `notes/`, with a monotonic ID counter so each new note gets a stable filename.
 
-in-scope:
-* want it to be able to stay on screen no matter what other windows I click on
-  (only disappears when I close or minimize it)
-* can shrink or expand the window
-* can use mouse and keys to move curser
-* saves even after closing but only within the app 
-  (? idrk if thats possible w/o file-saving)
-* text wrap-around
+## Requirements
 
+- **Compiler:** GCC or Clang with **C++20** (`std::format`, `std::filesystem`, etc.)
+- **OS:** Linux is assumed (paths use `/`; run the binary from the project root so `notes/` resolves correctly)
 
-out-scope:
-* no undo/redo
-* no saving into a file
-* no non-roman characters
+## Build
 
-Thoughts while sketching:
-* I need a container to hold and sort through the different SNs created.
-  Should I create a class or smth to hold it ? Or maybe the app itself is
-  the container?
-* I should have just one function for determining how long ago the last edit was 
-  I was thinking of having different functions depending on how long it has been 
-  since the last edit (e.g., convert to time if it only has been hours, days 
-  if > 24 hours passed, etc.) but that seems like too much, so instead i'll do an internal
-  check of whether `now - previous_edit_time` > 24 hours, > 31 days, etc. XXXXX
-
-  Actually, I'll have a choice that lets users decide how they want to display their
-  "last edited": _ days, _ hours, _ seconds ago OR any combination of these (including
-  just one, e.g., 74 hours ago or 266400 seconds ago). I'll pass that choice through 
-  an extra argument in `get_last_edit` 
-
-
-Sketches:
-1) 
-is the each tab of the SN just a struct ?
-
-the struct can have:
-* a vector of strings to contain the text in the SN
-* an integer representing the id of that specific SN 
-* another integer for a timestamp representing  when it was last edited
-* another integer for the date that it was created
-* a string for the title of the SN
-* 
-
-smth like:
-
-```cpp
-struct sticky_note {
-    std::vector<std::string> text;
-    int id;
-    int last_edited;
-    int created;
-    std::string title;
-}
+```bash
+make
 ```
 
-2)
-add functions that manipulate the struct
+Produces `sticky_notes` in the project directory. Alternatively:
 
-functions can be:
-* converts the time extracted for last_edited and created from the 
-  `std::chrono::time_point<std::chrono::system_clock>` type into readible date and time
-* updates the last_edited time
-* something that creates/modifies title of SN
-* can insert/delete from the vector of strings (modifying the notes as the user does it)
+```bash
+g++ -std=c++20 -Wall -Wextra -o sticky_notes src/main.cpp src/parser.cpp src/sticky_note.cpp
+```
 
-3)
-lets start off with a command-driven terminal editor
-* this'll make it manageable and let me focus on the fundamentals of an editor which is
-  the type of data structure needed to hold text (although this can change with more
-  proficiency), how to insert/delete text, saving notes
+## Run
 
-* list of commands:
-  - `write`
-    - the input of the user will be added to the body of text
-  - `erase <char/word> <n>`
-    - the user will have two options:
-      a) erase n words (detecting the first space or newline character from back to front to detect word)
-      b) erase n characters (user will enter extra integer input to decide how many characters)
-    - the default will be words
-  - `save`
-    - saves the current note
-  - `delete`
-    - deletes the current note
-  - `list`
-    - lists the notes made
-  - `open <note_name>`
-    - opens the note associated with inputted note_name
-  - `view <note_name>`
-    - prints out the contents of inputted note
-  - `quit`
-    - saves current note and quits the program 
+From the repository root (so `notes/next_note_id.txt` and `notes/note_*.txt` are found):
 
-4)
-im making it so when a user starts the program, it gives them two options: one to create and one to open a note
-this way i dont have to automatically create a new note everytime the user starts the program.
-if the user is opening a note, i need to figure out what should be used to locate the wanted file.
+```bash
+./sticky_notes
+```
 
+**First run:** if `notes/next_note_id.txt` contains `0`, the program creates your first note and walks you through a title.
 
+**Later runs:** you can **open** an existing note (by **exact title** as shown in `list`) or **create** a new one.
 
+## Commands
 
+| Command | Description |
+|--------|-------------|
+| `write <text>` | Append **one line** to the body (everything after `write ` on the same line). |
+| `erase` | Erase the **last word** on the current line (same as `erase word` with one word). |
+| `erase char` | Delete the last character on the current line. |
+| `erase char <n>` | Delete up to `n` characters from the end of the line. |
+| `erase word` | Delete the last **word** (non-space suffix) on the current line. |
+| `erase word <n>` | Delete up to `n` trailing words on the current line. |
+| `save` | Write the current note to its file. |
+| `create` | Create a new note; the **current** note is saved first if it has a path. |
+| `list` | Print **id : title** for each `notes/note_*.txt` file that parses correctly. |
+| `open <title>` | Load a note by **exact title** (same string as in `list`). Title can contain spaces. |
+| `view <title>` | Print that note’s body without switching the active note. |
+| `delete` | Delete the current note’s file from disk (with confirmation); clears in-memory state. |
+| `quit` | Save the current note (if it has a path) and exit (with confirmation). |
+| `help` | Show the built-in command summary. |
 
+Unknown commands print a short error; use `help` for the full list.
 
+## On-disk layout
 
+- `notes/next_note_id.txt` — next numeric id to assign (one integer per line).
+- `notes/note_<id>.txt` — note file; format is sectioned text:
 
-Weekly Project Log:
-- short description of completed work
-- list of open problems
-- list of next-week goals
+  `Title:`, `ID:`, `Created:`, `Last Edited:`, `Body:` (each label on its own line, value on the following line(s); body is the rest of the file).
 
-Week 1 (04/06/26)
-Description:
-* started the Sticky Note project
-* made git repo and remote branch
-* created sticky_note structure and some functions
-* started the project log
+Opening a note **reloads** title, id, and body lines. Timestamps in memory are set to the load time unless you extend the code to parse the saved date strings.
 
-Open-Problems:
-* how to create a file from within the program (instead of having the user already have one created to save into)
+## Project layout
 
-NW Goals:
-* 
+```
+src/
+  main.cpp        — CLI loop, note I/O, erase/save/list/open/view
+  parser.cpp/.h   — command parsing; note file parsing
+  sticky_note.cpp/.h — `sticky_note` struct; created / last-edited formatting
+notes/            — data directory (tracked or gitignored per your preference)
+Makefile
+```
+
+## Limitations
+
+- One **active** note at a time; switching uses `open` / `create`.
+- **Titles** for `open` / `view` must match **exactly** (whitespace matters after trimming user input in some prompts).
+- No GUI, undo stack, or rich text—by design for this version.
+
+## License
+
+Add a license file if you distribute the project; none is set here by default.
