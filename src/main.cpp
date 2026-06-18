@@ -272,9 +272,25 @@ static bool load_note_from_path(sticky_note& sn, const string& path) {
 	    sn.text.push_back(bline);
 	}
     }
+
     const auto now = std::chrono::system_clock::now();
     sn.created = now;
     sn.last_edited = now;
+    if (fi.size() > 2 && !fi[2].empty()) {
+	std::chrono::system_clock::time_point t;
+	if (parse_saved_timestamp_line(fi[2], t)) {
+	    sn.created = t;
+	}
+    }
+    if (fi.size() > 3 && !fi[3].empty()) {
+	std::chrono::system_clock::time_point t;
+	if (parse_saved_timestamp_line(fi[3], t)) {
+	    sn.last_edited = t;
+	}
+    }
+    if (sn.last_edited < sn.created) {
+	sn.last_edited = sn.created;
+    }
     return true;
 }
 

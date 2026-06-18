@@ -59,7 +59,7 @@ Unknown commands print a short error; use `help` for the full list.
 
   `Title:`, `ID:`, `Created:`, `Last Edited:`, `Body:` (each label on its own line, value on the following line(s); body is the rest of the file).
 
-Opening a note **reloads** title, id, and body lines. Timestamps in memory are set to the load time unless you extend the code to parse the saved date strings.
+Opening a note **reloads** title, id, body, and parses **Created** / **Last Edited** lines back into `std::chrono` (English month names; uses `en_US.UTF-8` locale when available). If a line is missing or invalid, that field falls back to the current time, and `last_edited` is clamped so it is not before `created`.
 
 ## Project layout
 
@@ -77,5 +77,3 @@ Makefile
 - One **active** note at a time; switching uses `open` / `create`.
 - **Titles** for `open` / `view` must match **exactly** (whitespace matters after trimming user input in some prompts).
 - No GUI, undo stack, or rich text—by design for this version.
-
-

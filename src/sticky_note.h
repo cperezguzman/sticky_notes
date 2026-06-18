@@ -25,4 +25,7 @@ void set_title(sticky_note& sn, const std::string& title);
 
 void update_text(sticky_note& sn, const std::string& new_text);
 
+// Parses lines written by get_created() / get_last_edit(..., "date_time"). Returns false if parsing fails.
+bool parse_saved_timestamp_line(const std::string& line, std::chrono::system_clock::time_point& out);
+
 #endif

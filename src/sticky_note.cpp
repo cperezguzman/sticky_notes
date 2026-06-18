@@ -1,6 +1,11 @@
 #include "sticky_note.h"
 
+#include <ctime>
 #include <format>
+#include <iomanip>
+#include <locale>
+#include <sstream>
+#include <stdexcept>
 
 std::string get_last_edit(const sticky_note& sn, const std::string& choice) {
     auto now = std::chrono::system_clock::now();
@@ -64,4 +69,40 @@ void set_title(sticky_note& sn, const std::string& title) {
 
 void update_text(sticky_note& sn, const std::string& new_text) {
     sn.text.push_back(new_text);
+}
+
+bool parse_saved_timestamp_line(const std::string& line, std::chrono::system_clock::time_point& out) {
+    std::string rest = line;
+    const std::string created_prefix = "Created: ";
+    const std::string edited_prefix = "Last Edited: ";
+    if (rest.starts_with(created_prefix)) {
+	rest.erase(0, created_prefix.size());
+    } else if (rest.starts_with(edited_prefix)) {
+	rest.erase(0, edited_prefix.size());
+    }
+
+    std::istringstream ss(rest);
+    try {
+	ss.imbue(std::locale("en_US.UTF-8"));
+    } catch (const std::runtime_error&) {
+	try {
+	    ss.imbue(std::locale("C.UTF-8"));
+	} catch (const std::runtime_error&) {
+	    // English month names in %B may still fail below.
+	}
+    }
+
+    std::tm tm = {};
+    ss >> std::get_time(&tm, "%B %d, %Y at %I:%M %p");
+    if (ss.fail()) {
+	return false;
+    }
+
+    const std::time_t tt = std::mktime(&tm);
+    if (tt == static_cast<std::time_t>(-1)) {
+	return false;
+    }
+
+    out = std::chrono::system_clock::from_time_t(tt);
+    return true;
 }

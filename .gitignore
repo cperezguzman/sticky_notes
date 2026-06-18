@@ -5,3 +5,7 @@
 *~
 
 *.pdf
+
+# Build output
+sticky_notes
+*.o
