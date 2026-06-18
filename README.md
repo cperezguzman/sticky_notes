@@ -16,7 +16,8 @@ make
 Produces `sticky_notes` in the project directory. Alternatively:
 
 ```bash
-g++ -std=c++20 -Wall -Wextra -o sticky_notes src/main.cpp src/parser.cpp src/sticky_note.cpp
+g++ -std=c++20 -Wall -Wextra -o sticky_notes \
+  src/main.cpp src/parser.cpp src/sticky_note.cpp src/note_store.cpp src/note_editor.cpp
 ```
 
 ## Run
@@ -29,23 +30,25 @@ From the repository root (so `notes/next_note_id.txt` and `notes/note_*.txt` are
 
 **First run:** if `notes/next_note_id.txt` contains `0`, the program creates your first note and walks you through a title.
 
-**Later runs:** you can **open** an existing note (by **exact title** as shown in `list`) or **create** a new one.
+**Later runs:** you can **open** an existing note (by **exact title** or **numeric id** from `list`) or **create** a new one.
 
 ## Commands
 
 | Command | Description |
 |--------|-------------|
-| `write <text>` | Append **one line** to the body (everything after `write ` on the same line). |
+| `write <text>` | Set the **current line** to `text` (creates a line if the cursor is on a new line at the end). |
 | `erase` | Erase the **last word** on the current line (same as `erase word` with one word). |
 | `erase char` | Delete the last character on the current line. |
 | `erase char <n>` | Delete up to `n` characters from the end of the line. |
-| `erase word` | Delete the last **word** (non-space suffix) on the current line. |
+| `erase word` | Delete the last **word** on the current line. |
 | `erase word <n>` | Delete up to `n` trailing words on the current line. |
+| `goto <n>` | Move the cursor to line `n` (1-based). You can go to `line_count + 1` to position for a new line. |
+| `show` | Print the body with line numbers; `>` marks the current line. |
 | `save` | Write the current note to its file. |
 | `create` | Create a new note; the **current** note is saved first if it has a path. |
 | `list` | Print **id : title** for each `notes/note_*.txt` file that parses correctly. |
-| `open <title>` | Load a note by **exact title** (same string as in `list`). Title can contain spaces. |
-| `view <title>` | Print that note’s body without switching the active note. |
+| `open <title\|id>` | Load a note by **exact title** or **numeric id** (as shown in `list`). |
+| `view <title\|id>` | Print that note’s body without switching the active note. |
 | `delete` | Delete the current note’s file from disk (with confirmation); clears in-memory state. |
 | `quit` | Save the current note (if it has a path) and exit (with confirmation). |
 | `help` | Show the built-in command summary. |
@@ -65,15 +68,44 @@ Opening a note **reloads** title, id, body, and parses **Created** / **Last Edit
 
 ```
 src/
-  main.cpp        — CLI loop, note I/O, erase/save/list/open/view
-  parser.cpp/.h   — command parsing; note file parsing
-  sticky_note.cpp/.h — `sticky_note` struct; created / last-edited formatting
-notes/            — data directory (tracked or gitignored per your preference)
+  main.cpp           — CLI loop and command dispatch
+  note_editor.cpp/.h — cursor, write/erase/show on current line
+  note_store.cpp/.h  — load/save, list, open/view by title or id
+  parser.cpp/.h      — command parsing; note file parsing
+  sticky_note.cpp/.h — `sticky_note` struct; timestamps
+tests/
+  test_main.cpp      — parser and timestamp tests
+  fixtures/          — sample note files for tests
+notes/               — data directory
 Makefile
 ```
+
+## Tests
+
+From the project root:
+
+```bash
+make test
+```
+
+Runs parser and timestamp parsing checks against `tests/fixtures/`.
+
+## Manual test checklist
+
+- [ ] First run with `next_note_id.txt` = `0` creates a note and prompts for title.
+- [ ] `write hello` then `show` — line 1 shows `hello` with `>` on that line.
+- [ ] `goto 1`, `write replaced` — line 1 updates without adding a second line.
+- [ ] `goto 2` on a one-line note — cursor moves to new-line slot; `write` appends line 2.
+- [ ] `erase word` / `erase char` on current line only (not always the last line).
+- [ ] `list` shows `id : title`; `open 0` and `open <exact title>` both load the same note.
+- [ ] `view <id>` prints body without changing the active note.
+- [ ] `save` then reopen — body and timestamps persist.
+- [ ] `create` saves the previous note before creating a new one.
+- [ ] `delete` + `y` removes the file; `quit` + `y` saves and exits.
 
 ## Limitations
 
 - One **active** note at a time; switching uses `open` / `create`.
-- **Titles** for `open` / `view` must match **exactly** (whitespace matters after trimming user input in some prompts).
+- **Titles** for `open` / `view` must match **exactly** when not using a numeric id.
+- Opening by id when the argument is all digits; titles that are only digits will be treated as ids.
 - No GUI, undo stack, or rich text—by design for this version.

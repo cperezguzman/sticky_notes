@@ -8,4 +8,8 @@
 
 # Build output
 sticky_notes
+test_runner
 *.o
+
+# Stored notes
+notes/
