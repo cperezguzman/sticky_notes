@@ -36,20 +36,23 @@ From the repository root (so `notes/next_note_id.txt` and `notes/note_*.txt` are
 
 | Command | Description |
 |--------|-------------|
-| `write <text>` | Set the **current line** to `text` (creates a line if the cursor is on a new line at the end). |
+| `write <text>` | Replace the **current line** with `text` (creates a line if the cursor is on a new line at the end). |
+| `append <text>` | Add `text` to the **end** of the current line (creates the line if needed). |
 | `erase` | Erase the **last word** on the current line (same as `erase word` with one word). |
 | `erase char` | Delete the last character on the current line. |
 | `erase char <n>` | Delete up to `n` characters from the end of the line. |
 | `erase word` | Delete the last **word** on the current line. |
 | `erase word <n>` | Delete up to `n` trailing words on the current line. |
 | `goto <n>` | Move the cursor to line `n` (1-based). You can go to `line_count + 1` to position for a new line. |
+| `newline` | Insert a blank line **after** the cursor and move the cursor there. |
+| `delete line` | Remove the line at the cursor (does not delete the note file). |
 | `show` | Print the body with line numbers; `>` marks the current line. |
 | `save` | Write the current note to its file. |
 | `create` | Create a new note; the **current** note is saved first if it has a path. |
 | `list` | Print **id : title** for each `notes/note_*.txt` file that parses correctly. |
 | `open <title\|id>` | Load a note by **exact title** or **numeric id** (as shown in `list`). |
 | `view <title\|id>` | Print that note’s body without switching the active note. |
-| `delete` | Delete the current note’s file from disk (with confirmation); clears in-memory state. |
+| `delete` | Delete the **note file** from disk (with confirmation); clears in-memory state. |
 | `quit` | Save the current note (if it has a path) and exit (with confirmation). |
 | `help` | Show the built-in command summary. |
 
@@ -96,7 +99,9 @@ Runs parser and timestamp parsing checks against `tests/fixtures/`.
 - [ ] `write hello` then `show` — line 1 shows `hello` with `>` on that line.
 - [ ] `goto 1`, `write replaced` — line 1 updates without adding a second line.
 - [ ] `goto 2` on a one-line note — cursor moves to new-line slot; `write` appends line 2.
-- [ ] `erase word` / `erase char` on current line only (not always the last line).
+- [ ] `append world` after `write hello` on the same line yields `helloworld`.
+- [ ] `newline` inserts a blank line after the cursor; `delete line` removes the current line.
+- [ ] `delete` (no args) still deletes the note **file**; `delete line` only removes one body line.
 - [ ] `list` shows `id : title`; `open 0` and `open <exact title>` both load the same note.
 - [ ] `view <id>` prints body without changing the active note.
 - [ ] `save` then reopen — body and timestamps persist.

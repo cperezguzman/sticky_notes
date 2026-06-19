@@ -1,6 +1,7 @@
 #include "note_editor.h"
 
 #include <climits>
+#include <cstddef>
 #include <iostream>
 #include <sstream>
 
@@ -60,6 +61,16 @@ void editor_reset_cursor(EditorSession& session) {
 void write_to_current_line(EditorSession& session, const std::string& text) {
     if (session.current_line < session.note.text.size()) {
 	session.note.text[session.current_line] = text;
+    } else {
+	session.note.text.push_back(text);
+	session.current_line = session.note.text.size() - 1;
+    }
+    update_last_edit(session.note);
+}
+
+void append_to_current_line(EditorSession& session, const std::string& text) {
+    if (session.current_line < session.note.text.size()) {
+	session.note.text[session.current_line] += text;
     } else {
 	session.note.text.push_back(text);
 	session.current_line = session.note.text.size() - 1;
@@ -175,6 +186,40 @@ bool goto_line(EditorSession& session, int line_1based) {
 	std::cout << " (new line)";
     }
     std::cout << ".\n";
+    return true;
+}
+
+void insert_newline_at_cursor(EditorSession& session) {
+    if (session.current_line < session.note.text.size()) {
+	session.note.text.insert(session.note.text.begin()
+				+ static_cast<std::ptrdiff_t>(session.current_line + 1),
+				"");
+	session.current_line += 1;
+    } else {
+	session.note.text.push_back("");
+	session.current_line = session.note.text.size() - 1;
+    }
+    update_last_edit(session.note);
+    std::cout << "Cursor on line " << (session.current_line + 1) << ".\n";
+}
+
+bool delete_current_line(EditorSession& session) {
+    if (!current_line_exists(session)) {
+	std::cout << "Error: No line at the cursor to delete.\n";
+	return false;
+    }
+
+    session.note.text.erase(session.note.text.begin()
+			    + static_cast<std::ptrdiff_t>(session.current_line));
+
+    if (session.note.text.empty()) {
+	session.current_line = 0;
+    } else if (session.current_line >= session.note.text.size()) {
+	session.current_line = session.note.text.size() - 1;
+    }
+
+    update_last_edit(session.note);
+    std::cout << "Line deleted. Cursor on line " << (session.current_line + 1) << ".\n";
     return true;
 }
 

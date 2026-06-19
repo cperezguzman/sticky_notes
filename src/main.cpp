@@ -81,9 +81,12 @@ void view_note_by_key(const std::string& key) {
 
 void print_usage() {
     std::cout << "This is the command list the user can use:\n"
-	      << "write <text>				set text on the current line\n"
+	      << "write <text>				replace text on the current line\n"
+	      << "append <text>				add text to the end of the current line\n"
 	      << "erase [char|word] [n]			erase on the current line (default: word)\n"
 	      << "goto <n>				move cursor to line n (1-based)\n"
+	      << "newline					insert a blank line after the cursor\n"
+	      << "delete line				remove the line at the cursor\n"
 	      << "show					print body with line numbers and cursor\n"
 	      << "save					save the current note\n"
 	      << "delete					delete the current note file\n"
@@ -174,6 +177,14 @@ int main() {
 	    write_to_current_line(session, fields[1]);
 	}
 
+	else if (fields[0] == "append") {
+	    if (fields.size() < 2) {
+		std::cout << "Error: append needs text on the same line.\n";
+		continue;
+	    }
+	    append_to_current_line(session, fields[1]);
+	}
+
 	else if (fields[0] == "erase") {
 	    erase_from_current_line(session, fields);
 	}
@@ -195,6 +206,10 @@ int main() {
 
 	else if (fields[0] == "show") {
 	    show_note(session);
+	}
+
+	else if (fields[0] == "newline") {
+	    insert_newline_at_cursor(session);
 	}
 
 	else if (fields[0] == "save") {
@@ -226,6 +241,11 @@ int main() {
 	}
 
 	else if (fields[0] == "delete") {
+	    if (fields.size() >= 2 && fields[1] == "line") {
+		delete_current_line(session);
+		continue;
+	    }
+
 	    const std::string choice = prompt_yes_no(
 		"This will permanently delete this note file.\nAre you sure? (y/n): ");
 

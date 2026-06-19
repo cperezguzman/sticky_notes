@@ -25,7 +25,7 @@ void strip_trailing_cr(std::string& s) {
 } // namespace
 
 static bool takes_rest_of_line(const std::string& verb) {
-    return verb == "write" || verb == "view" || verb == "open";
+    return verb == "write" || verb == "append" || verb == "view" || verb == "open";
 }
 
 std::vector<std::string> parse_command(const std::string& command) {

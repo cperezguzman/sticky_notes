@@ -1,3 +1,4 @@
+#include "note_editor.h"
 #include "parser.h"
 #include "sticky_note.h"
 
@@ -59,6 +60,25 @@ void test_parse_saved_timestamp_invalid() {
     std::chrono::system_clock::time_point tp{};
     check(!parse_saved_timestamp_line("not a date", tp), "invalid timestamp rejected");
 }
+
+void test_append_to_current_line() {
+    EditorSession session{};
+    write_to_current_line(session, "hello");
+    append_to_current_line(session, " world");
+    check(session.note.text.size() == 1, "append stays on one line");
+    check(session.note.text[0] == "hello world", "append concatenates");
+}
+
+void test_newline_and_delete_line() {
+    EditorSession session{};
+    write_to_current_line(session, "a");
+    insert_newline_at_cursor(session);
+    check(session.note.text.size() == 2, "newline inserts blank line");
+    check(session.note.text[1].empty(), "new line is empty");
+    check(session.current_line == 1, "cursor on new line");
+    delete_current_line(session);
+    check(session.note.text.size() == 1, "delete line removes one line");
+}
 } // namespace
 
 int main() {
@@ -67,6 +87,8 @@ int main() {
     test_parse_file_info_fixture();
     test_parse_saved_timestamp_line();
     test_parse_saved_timestamp_invalid();
+    test_append_to_current_line();
+    test_newline_and_delete_line();
 
     if (failures == 0) {
 	std::cout << "All tests passed.\n";

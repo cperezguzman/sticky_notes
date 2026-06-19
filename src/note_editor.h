@@ -16,8 +16,14 @@ void editor_reset_cursor(EditorSession& session);
 
 void write_to_current_line(EditorSession& session, const std::string& text);
 
+void append_to_current_line(EditorSession& session, const std::string& text);
+
 void erase_from_current_line(EditorSession& session, const std::vector<std::string>& fields);
 
 bool goto_line(EditorSession& session, int line_1based);
+
+void insert_newline_at_cursor(EditorSession& session);
+
+bool delete_current_line(EditorSession& session);
 
 void show_note(const EditorSession& session);
