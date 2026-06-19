@@ -29,3 +29,8 @@ void print_note_by_title(const std::string& title);
 void print_note_by_id(int id);
 
 sticky_note create_note(bool first_time);
+
+// Creates notes/ and notes/next_note_id.txt (with "0") when missing.
+void ensure_notes_data_dir();
+
+bool rename_current_note(sticky_note& sn, const std::string& new_title);

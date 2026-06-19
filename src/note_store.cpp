@@ -255,3 +255,28 @@ sticky_note create_note(bool first_time) {
 
     return sn;
 }
+
+void ensure_notes_data_dir() {
+    std::error_code ec;
+    std::filesystem::create_directories("notes", ec);
+    if (!std::filesystem::exists("notes/next_note_id.txt")) {
+	std::ofstream out("notes/next_note_id.txt");
+	out << "0";
+    }
+}
+
+bool rename_current_note(sticky_note& sn, const std::string& new_title) {
+    if (sn.note_path.empty()) {
+	std::cout << "Error: No note loaded to rename.\n";
+	return false;
+    }
+    if (new_title.empty()) {
+	std::cout << "Error: Title cannot be empty.\n";
+	return false;
+    }
+
+    set_title(sn, new_title);
+    save_note(sn);
+    std::cout << "Renamed note to \"" << sn.title << "\".\n";
+    return true;
+}

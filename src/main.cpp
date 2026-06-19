@@ -83,12 +83,16 @@ void print_usage() {
     std::cout << "This is the command list the user can use:\n"
 	      << "write <text>				replace text on the current line\n"
 	      << "append <text>				add text to the end of the current line\n"
-	      << "erase [char|word] [n]			erase on the current line (default: word)\n"
-	      << "goto <n>				move cursor to line n (1-based)\n"
-	      << "newline					insert a blank line after the cursor\n"
+	      << "insert <text>				insert text at the cursor\n"
+	      << "erase [char|word] [n]			delete before cursor (default: one char)\n"
+	      << "del					delete character at cursor (forward delete)\n"
+	      << "left / right / home / end		move cursor within the note\n"
+	      << "goto <line> [col]			jump to line (and optional column, 1-based)\n"
+	      << "newline					split line at cursor, or insert blank line\n"
 	      << "delete line				remove the line at the cursor\n"
-	      << "show					print body with line numbers and cursor\n"
+	      << "show					print body; | marks the cursor\n"
 	      << "save					save the current note\n"
+	      << "rename <title>			change the current note title\n"
 	      << "delete					delete the current note file\n"
 	      << "create					create a new note (current note is saved first)\n"
 	      << "list					list saved notes (id : title)\n"
@@ -100,10 +104,12 @@ void print_usage() {
 } // namespace
 
 int main() {
+    ensure_notes_data_dir();
+
     std::ifstream in("notes/next_note_id.txt");
 
     if (!in) {
-	std::cerr << "Error: Could not find file that contains the next viable id number.\n";
+	std::cerr << "Error: Could not read notes/next_note_id.txt.\n";
 	return 1;
     }
 
@@ -185,23 +191,55 @@ int main() {
 	    append_to_current_line(session, fields[1]);
 	}
 
+	else if (fields[0] == "insert") {
+	    if (fields.size() < 2) {
+		std::cout << "Error: insert needs text on the same line.\n";
+		continue;
+	    }
+	    insert_at_cursor(session, fields[1]);
+	}
+
 	else if (fields[0] == "erase") {
 	    erase_from_current_line(session, fields);
 	}
 
+	else if (fields[0] == "del") {
+	    delete_at_cursor(session);
+	}
+
+	else if (fields[0] == "left") {
+	    move_left(session);
+	}
+
+	else if (fields[0] == "right") {
+	    move_right(session);
+	}
+
+	else if (fields[0] == "home") {
+	    move_home(session);
+	}
+
+	else if (fields[0] == "end") {
+	    move_end(session);
+	}
+
 	else if (fields[0] == "goto") {
 	    if (fields.size() < 2) {
-		std::cout << "Error: goto needs a line number (goto <n>).\n";
+		std::cout << "Error: goto needs a line number (goto <line> [col]).\n";
 		continue;
 	    }
 	    int line = 0;
+	    int col = 1;
 	    try {
 		line = std::stoi(fields[1]);
+		if (fields.size() >= 3) {
+		    col = std::stoi(fields[2]);
+		}
 	    } catch (const std::exception&) {
-		std::cout << "Error: Invalid line number.\n";
+		std::cout << "Error: Invalid line or column number.\n";
 		continue;
 	    }
-	    goto_line(session, line);
+	    goto_line(session, line, col);
 	}
 
 	else if (fields[0] == "show") {
@@ -215,6 +253,14 @@ int main() {
 	else if (fields[0] == "save") {
 	    save_note(session.note);
 	    std::cout << "Saved.\n";
+	}
+
+	else if (fields[0] == "rename") {
+	    if (fields.size() < 2) {
+		std::cout << "Error: rename needs a title (rename <title>).\n";
+		continue;
+	    }
+	    rename_current_note(session.note, fields[1]);
 	}
 
 	else if (fields[0] == "list") {

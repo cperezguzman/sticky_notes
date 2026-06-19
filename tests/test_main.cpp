@@ -73,11 +73,48 @@ void test_newline_and_delete_line() {
     EditorSession session{};
     write_to_current_line(session, "a");
     insert_newline_at_cursor(session);
-    check(session.note.text.size() == 2, "newline inserts blank line");
-    check(session.note.text[1].empty(), "new line is empty");
-    check(session.current_line == 1, "cursor on new line");
+    check(session.note.text.size() == 2, "newline splits or inserts second line");
+    check(session.current_line == 1, "cursor on second line");
     delete_current_line(session);
     check(session.note.text.size() == 1, "delete line removes one line");
+}
+
+void test_insert_at_cursor() {
+    EditorSession session{};
+    write_to_current_line(session, "hello");
+    goto_line(session, 1, 3);
+    insert_at_cursor(session, "XX");
+    check(session.note.text[0] == "heXXllo", "insert at column");
+    check(format_line_with_cursor(session, 0) == "heXX|llo", "cursor marker position");
+}
+
+void test_erase_before_cursor() {
+    EditorSession session{};
+    write_to_current_line(session, "hello");
+    goto_line(session, 1, 4);
+    erase_from_current_line(session, {"erase"});
+    check(session.note.text[0] == "helo", "erase deletes char before cursor");
+    check(session.current_column == 2, "cursor moves back after erase");
+}
+
+void test_move_left_right() {
+    EditorSession session{};
+    write_to_current_line(session, "ab");
+    goto_line(session, 1, 3);
+    move_left(session);
+    check(session.current_column == 1, "left within line");
+    move_home(session);
+    check(session.current_column == 0, "home");
+    move_end(session);
+    check(session.current_column == 2, "end");
+}
+
+void test_delete_at_cursor() {
+    EditorSession session{};
+    write_to_current_line(session, "abc");
+    goto_line(session, 1, 2);
+    delete_at_cursor(session);
+    check(session.note.text[0] == "ac", "del removes char at cursor");
 }
 } // namespace
 
@@ -89,6 +126,10 @@ int main() {
     test_parse_saved_timestamp_invalid();
     test_append_to_current_line();
     test_newline_and_delete_line();
+    test_insert_at_cursor();
+    test_erase_before_cursor();
+    test_move_left_right();
+    test_delete_at_cursor();
 
     if (failures == 0) {
 	std::cout << "All tests passed.\n";

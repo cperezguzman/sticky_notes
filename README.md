@@ -28,7 +28,9 @@ From the repository root (so `notes/next_note_id.txt` and `notes/note_*.txt` are
 ./sticky_notes
 ```
 
-**First run:** if `notes/next_note_id.txt` contains `0`, the program creates your first note and walks you through a title.
+**First run:** the program creates `notes/` and `notes/next_note_id.txt` if they are missing. When the counter is `0`, it walks you through creating your first note.
+
+**Data:** `notes/` is gitignored — your note files stay local and are not committed.
 
 **Later runs:** you can **open** an existing note (by **exact title** or **numeric id** from `list`) or **create** a new one.
 
@@ -36,18 +38,23 @@ From the repository root (so `notes/next_note_id.txt` and `notes/note_*.txt` are
 
 | Command | Description |
 |--------|-------------|
-| `write <text>` | Replace the **current line** with `text` (creates a line if the cursor is on a new line at the end). |
-| `append <text>` | Add `text` to the **end** of the current line (creates the line if needed). |
-| `erase` | Erase the **last word** on the current line (same as `erase word` with one word). |
-| `erase char` | Delete the last character on the current line. |
-| `erase char <n>` | Delete up to `n` characters from the end of the line. |
-| `erase word` | Delete the last **word** on the current line. |
-| `erase word <n>` | Delete up to `n` trailing words on the current line. |
-| `goto <n>` | Move the cursor to line `n` (1-based). You can go to `line_count + 1` to position for a new line. |
-| `newline` | Insert a blank line **after** the cursor and move the cursor there. |
+| `write <text>` | Replace the **current line** with `text`. |
+| `append <text>` | Add `text` to the **end** of the current line. |
+| `insert <text>` | Insert `text` at the **cursor** (column position). |
+| `erase` | Delete **one character before** the cursor (backspace). |
+| `del` | Delete the character **at** the cursor (forward delete). |
+| `erase char` | Same as `erase`. |
+| `erase char <n>` | Delete up to `n` characters before the cursor. |
+| `erase word` | Delete the word immediately before the cursor. |
+| `erase word <n>` | Delete up to `n` words before the cursor. |
+| `left` / `right` | Move the cursor one column; crosses line boundaries at edges. |
+| `home` / `end` | Move to start / end of the current line. |
+| `goto <line> [col]` | Jump to line (1-based); optional column (1-based, default 1). |
+| `newline` | Split the line at the cursor, or insert a blank line if at end. |
 | `delete line` | Remove the line at the cursor (does not delete the note file). |
-| `show` | Print the body with line numbers; `>` marks the current line. |
+| `show` | Print the body; `>` marks the current line and `\|` marks the column. |
 | `save` | Write the current note to its file. |
+| `rename <title>` | Change the current note's title and save. |
 | `create` | Create a new note; the **current** note is saved first if it has a path. |
 | `list` | Print **id : title** for each `notes/note_*.txt` file that parses correctly. |
 | `open <title\|id>` | Load a note by **exact title** or **numeric id** (as shown in `list`). |
@@ -72,14 +79,14 @@ Opening a note **reloads** title, id, body, and parses **Created** / **Last Edit
 ```
 src/
   main.cpp           — CLI loop and command dispatch
-  note_editor.cpp/.h — cursor, write/erase/show on current line
+  note_editor.cpp/.h — line and column cursor; insert, move, erase at cursor
   note_store.cpp/.h  — load/save, list, open/view by title or id
   parser.cpp/.h      — command parsing; note file parsing
   sticky_note.cpp/.h — `sticky_note` struct; timestamps
 tests/
   test_main.cpp      — parser and timestamp tests
   fixtures/          — sample note files for tests
-notes/               — data directory
+notes/               — local data (gitignored; auto-created on first run)
 Makefile
 ```
 
@@ -96,9 +103,11 @@ Runs parser and timestamp parsing checks against `tests/fixtures/`.
 ## Manual test checklist
 
 - [ ] First run with `next_note_id.txt` = `0` creates a note and prompts for title.
-- [ ] `write hello` then `show` — line 1 shows `hello` with `>` on that line.
-- [ ] `goto 1`, `write replaced` — line 1 updates without adding a second line.
-- [ ] `goto 2` on a one-line note — cursor moves to new-line slot; `write` appends line 2.
+- [ ] `write hello` then `show` — line 1 shows `hello|` (cursor at end).
+- [ ] `goto 1 3` then `insert XX` — yields `heXXllo` on line 1.
+- [ ] `left` / `right` move across characters and line boundaries.
+- [ ] `erase` deletes the character **before** the cursor, not always at line end.
+- [ ] `newline` on `hello|` splits into `hello` and `` (blank second line).
 - [ ] `append world` after `write hello` on the same line yields `helloworld`.
 - [ ] `newline` inserts a blank line after the cursor; `delete line` removes the current line.
 - [ ] `delete` (no args) still deletes the note **file**; `delete line` only removes one body line.
@@ -113,4 +122,4 @@ Runs parser and timestamp parsing checks against `tests/fixtures/`.
 - One **active** note at a time; switching uses `open` / `create`.
 - **Titles** for `open` / `view` must match **exactly** when not using a numeric id.
 - Opening by id when the argument is all digits; titles that are only digits will be treated as ids.
-- No GUI, undo stack, or rich text—by design for this version.
+- No GUI, undo stack, or forward-delete—by design for this version.
