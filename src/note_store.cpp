@@ -265,6 +265,87 @@ void ensure_notes_data_dir() {
     }
 }
 
+namespace {
+std::string yaml_double_quote(const std::string& s) {
+    std::string out = "\"";
+    for (char c : s) {
+	if (c == '\\' || c == '"') {
+	    out += '\\';
+	}
+	out += c;
+    }
+    out += '"';
+    return out;
+}
+
+std::string timestamp_value_for_yaml(const std::string& line) {
+    const std::string created_prefix = "Created: ";
+    const std::string edited_prefix = "Last Edited: ";
+    if (line.starts_with(created_prefix)) {
+	return line.substr(created_prefix.size());
+    }
+    if (line.starts_with(edited_prefix)) {
+	return line.substr(edited_prefix.size());
+    }
+    return line;
+}
+} // namespace
+
+std::string format_note_as_markdown(const sticky_note& sn) {
+    std::ostringstream out;
+    out << "---\n";
+    out << "id: " << sn.id << "\n";
+    out << "title: " << yaml_double_quote(sn.title) << "\n";
+    out << "created: " << yaml_double_quote(timestamp_value_for_yaml(get_created(sn))) << "\n";
+    out << "last_edited: "
+	<< yaml_double_quote(timestamp_value_for_yaml(get_last_edit(sn, "date_time"))) << "\n";
+    if (!sn.note_path.empty()) {
+	out << "source: " << yaml_double_quote(sn.note_path) << "\n";
+    }
+    out << "---\n\n";
+    for (std::size_t i = 0; i < sn.text.size(); ++i) {
+	if (i > 0) {
+	    out << '\n';
+	}
+	out << sn.text[i];
+    }
+    if (!sn.text.empty()) {
+	out << '\n';
+    }
+    return out.str();
+}
+
+std::string default_markdown_export_path(const sticky_note& sn) {
+    return "exports/note_" + std::to_string(sn.id) + ".md";
+}
+
+void ensure_markdown_export_dir() {
+    std::error_code ec;
+    std::filesystem::create_directories("exports", ec);
+}
+
+bool export_note_to_markdown(const sticky_note& sn, const std::string& path) {
+    if (sn.note_path.empty()) {
+	return false;
+    }
+
+    const auto parent = std::filesystem::path(path).parent_path();
+    if (!parent.empty()) {
+	std::error_code ec;
+	std::filesystem::create_directories(parent, ec);
+	if (ec) {
+	    return false;
+	}
+    }
+
+    std::ofstream out(path);
+    if (!out) {
+	return false;
+    }
+    out << format_note_as_markdown(sn);
+    return static_cast<bool>(out);
+}
+
 bool rename_current_note(sticky_note& sn, const std::string& new_title) {
     if (sn.note_path.empty()) {
 	std::cout << "Error: No note loaded to rename.\n";

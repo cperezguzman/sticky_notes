@@ -65,6 +65,7 @@ From the repository root (so `notes/next_note_id.txt` and `notes/note_*.txt` are
 | `list` | Print **id : title** for each `notes/note_*.txt` file that parses correctly. |
 | `open <title\|id>` | Load a note by **exact title** or **numeric id** (as shown in `list`). |
 | `view <title\|id>` | Print that note’s body without switching the active note. |
+| `export markdown [path]` | Write the current note as Markdown with YAML frontmatter. Default: `exports/note_<id>.md` (gitignored). |
 | `delete` | Delete the **note file** from disk (with confirmation); clears in-memory state. |
 | `quit` | Save the current note (if it has a path) and exit (with confirmation). |
 | `help` | Show the built-in command summary. |

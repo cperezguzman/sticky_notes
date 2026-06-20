@@ -104,6 +104,7 @@ void print_usage() {
 	      << "list					list saved notes (id : title)\n"
 	      << "open <title|id>			open a note by exact title or numeric id\n"
 	      << "view <title|id>			print a note by title or id\n"
+	      << "export markdown [path]		write current note as Markdown (default: exports/)\n"
 	      << "quit					save the current note and quit\n"
 	      << "help					show this menu\n";
 }
@@ -111,6 +112,7 @@ void print_usage() {
 
 int main() {
     ensure_notes_data_dir();
+    ensure_markdown_export_dir();
 
     std::ifstream in("notes/next_note_id.txt");
 
@@ -323,6 +325,33 @@ int main() {
 	    list_notes();
 	    if (!open_note_by_key(session, fields[1])) {
 		std::cout << "Open failed.\n";
+	    }
+	}
+
+	else if (fields[0] == "export") {
+	    if (fields.size() < 2 || fields[1] != "markdown") {
+		std::cout << "Error: use export markdown [path].\n";
+		continue;
+	    }
+	    if (session.note.note_path.empty()) {
+		std::cout << "Error: no note loaded to export.\n";
+		continue;
+	    }
+
+	    std::string path;
+	    const std::string prefix = "export markdown";
+	    if (command.size() > prefix.size()) {
+		path = command.substr(prefix.size());
+		trim_in_place(path);
+	    }
+	    if (path.empty()) {
+		path = default_markdown_export_path(session.note);
+	    }
+
+	    if (export_note_to_markdown(session.note, path)) {
+		std::cout << "Exported to " << path << ".\n";
+	    } else {
+		std::cout << "Export failed.\n";
 	    }
 	}
 

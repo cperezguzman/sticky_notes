@@ -1,8 +1,10 @@
 #include "note_editor.h"
+#include "note_store.h"
 #include "parser.h"
 #include "sticky_note.h"
 
 #include <cassert>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -142,6 +144,39 @@ void test_yank_and_paste() {
     check(session.note.text.size() == 2, "paste adds a line");
     check(session.note.text[1] == "copy me", "pasted line matches yanked line");
 }
+
+void test_format_note_as_markdown() {
+    sticky_note sn;
+    sn.id = 42;
+    sn.title = "Sample \"Title\"";
+    sn.note_path = "notes/note_42.txt";
+    sn.text = {"line one", "line two"};
+
+    const std::string md = format_note_as_markdown(sn);
+    check(md.find("id: 42") != std::string::npos, "markdown frontmatter id");
+    check(md.find("title: \"Sample \\\"Title\\\"\"") != std::string::npos, "markdown escapes title");
+    check(md.find("source: \"notes/note_42.txt\"") != std::string::npos, "markdown source path");
+    check(md.find("line one\nline two\n") != std::string::npos, "markdown body");
+}
+
+void test_export_note_to_markdown() {
+    sticky_note sn;
+    sn.id = 7;
+    sn.title = "Export Me";
+    sn.note_path = "notes/note_7.txt";
+    sn.text = {"hello"};
+
+    const std::string path = "exports/test_export_note_7.md";
+    ensure_markdown_export_dir();
+    check(export_note_to_markdown(sn, path), "export writes file");
+
+    std::ifstream in(path);
+    check(in.good(), "exported file readable");
+    std::ostringstream contents;
+    contents << in.rdbuf();
+    check(contents.str().find("title: \"Export Me\"") != std::string::npos, "exported content");
+    std::filesystem::remove(path);
+}
 } // namespace
 
 int main() {
@@ -159,6 +194,8 @@ int main() {
     test_undo_write();
     test_find_text();
     test_yank_and_paste();
+    test_format_note_as_markdown();
+    test_export_note_to_markdown();
 
     if (failures == 0) {
 	std::cout << "All tests passed.\n";

@@ -13,3 +13,12 @@ test_runner
 
 # Stored notes
 notes/
+
+# Local developer tooling (Obsidian vault, Cursor MCP — not for GitHub)
+docs/
+.cursor/
+.env
+.env.example
+
+# Markdown exports (regenerate with export markdown)
+exports/

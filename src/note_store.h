@@ -34,3 +34,11 @@ sticky_note create_note(bool first_time);
 void ensure_notes_data_dir();
 
 bool rename_current_note(sticky_note& sn, const std::string& new_title);
+
+std::string format_note_as_markdown(const sticky_note& sn);
+
+std::string default_markdown_export_path(const sticky_note& sn);
+
+void ensure_markdown_export_dir();
+
+bool export_note_to_markdown(const sticky_note& sn, const std::string& path);
