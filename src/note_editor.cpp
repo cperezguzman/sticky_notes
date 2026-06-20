@@ -109,7 +109,7 @@ void erase_chars_before_cursor(std::string& line, std::size_t& col, int n_chars)
 }
 
 bool search_from(EditorSession& session, const std::string& needle, std::size_t start_line,
-		 std::size_t start_col) {
+		 std::size_t start_col, std::size_t wrap_line, std::size_t wrap_col) {
     if (session.note.text.empty()) {
 	return false;
     }
@@ -126,6 +126,21 @@ bool search_from(EditorSession& session, const std::string& needle, std::size_t 
 	    return true;
 	}
     }
+
+    for (std::size_t line_idx = 0; line_idx < nlines; ++line_idx) {
+	const std::string& line = session.note.text[line_idx];
+	const std::size_t limit = (line_idx == wrap_line) ? wrap_col : line.size();
+	if (limit == 0) {
+	    continue;
+	}
+	const std::size_t pos = line.find(needle, 0);
+	if (pos != std::string::npos && pos < limit) {
+	    session.current_line = line_idx;
+	    session.current_column = pos;
+	    return true;
+	}
+    }
+
     return false;
 }
 } // namespace
@@ -482,7 +497,9 @@ bool find_text(EditorSession& session, const std::string& needle) {
     session.find_needle = needle;
     session.find_active = true;
 
-    if (search_from(session, needle, session.current_line, session.current_column)) {
+    const std::size_t wrap_line = session.current_line;
+    const std::size_t wrap_col = session.current_column;
+    if (search_from(session, needle, wrap_line, wrap_col, wrap_line, wrap_col)) {
 	std::cout << "Match found.\n";
 	show_cursor_position(session);
 	return true;
@@ -499,6 +516,9 @@ bool find_next(EditorSession& session) {
     }
 
     const std::string& needle = session.find_needle;
+    const std::size_t wrap_line = session.current_line;
+    const std::size_t wrap_col = session.current_column;
+
     std::size_t start_line = session.current_line;
     std::size_t start_col = session.current_column + needle.size();
     if (current_line_exists(session)
@@ -507,7 +527,7 @@ bool find_next(EditorSession& session) {
 	start_line = (start_line + 1) % session.note.text.size();
     }
 
-    if (search_from(session, needle, start_line, start_col)) {
+    if (search_from(session, needle, start_line, start_col, wrap_line, wrap_col)) {
 	std::cout << "Match found.\n";
 	show_cursor_position(session);
 	return true;

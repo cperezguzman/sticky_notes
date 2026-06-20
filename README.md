@@ -107,6 +107,12 @@ make test
 
 Runs parser and timestamp parsing checks against `tests/fixtures/`.
 
+Automated README manual checklist:
+
+```bash
+make smoke
+```
+
 ## Manual test checklist
 
 - [ ] First run with `next_note_id.txt` = `0` creates a note and prompts for title.

@@ -136,6 +136,17 @@ void test_find_text() {
 	  "cursor at match");
 }
 
+void test_find_wrap_and_findnext() {
+    EditorSession session{};
+    write_to_current_line(session, "foo world world");
+    move_end(session);
+    check(find_text(session, "world"), "find wraps from end of line");
+    check(session.current_column == 4, "find wraps to first match");
+
+    check(find_next(session), "findnext locates second match");
+    check(session.current_column == 10, "findnext cursor at second match");
+}
+
 void test_yank_and_paste() {
     EditorSession session{};
     write_to_current_line(session, "copy me");
@@ -193,6 +204,7 @@ int main() {
     test_delete_at_cursor();
     test_undo_write();
     test_find_text();
+    test_find_wrap_and_findnext();
     test_yank_and_paste();
     test_format_note_as_markdown();
     test_export_note_to_markdown();
