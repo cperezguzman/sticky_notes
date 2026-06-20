@@ -116,6 +116,32 @@ void test_delete_at_cursor() {
     delete_at_cursor(session);
     check(session.note.text[0] == "ac", "del removes char at cursor");
 }
+
+void test_undo_write() {
+    EditorSession session{};
+    write_to_current_line(session, "first");
+    write_to_current_line(session, "second");
+    editor_undo(session);
+    check(session.note.text[0] == "first", "undo restores previous text");
+}
+
+void test_find_text() {
+    EditorSession session{};
+    write_to_current_line(session, "hello world");
+    goto_line(session, 1, 1);
+    check(find_text(session, "world"), "find locates needle");
+    check(session.note.text[session.current_line].substr(session.current_column, 5) == "world",
+	  "cursor at match");
+}
+
+void test_yank_and_paste() {
+    EditorSession session{};
+    write_to_current_line(session, "copy me");
+    yank_line(session);
+    paste_line(session);
+    check(session.note.text.size() == 2, "paste adds a line");
+    check(session.note.text[1] == "copy me", "pasted line matches yanked line");
+}
 } // namespace
 
 int main() {
@@ -130,6 +156,9 @@ int main() {
     test_erase_before_cursor();
     test_move_left_right();
     test_delete_at_cursor();
+    test_undo_write();
+    test_find_text();
+    test_yank_and_paste();
 
     if (failures == 0) {
 	std::cout << "All tests passed.\n";

@@ -6,15 +6,31 @@
 #include <string>
 #include <vector>
 
+struct EditorSnapshot {
+    std::vector<std::string> text;
+    std::size_t current_line = 0;
+    std::size_t current_column = 0;
+};
+
 struct EditorSession {
     sticky_note note;
     // 0-based line; may equal note.text.size() for the virtual "new line at end" slot.
     std::size_t current_line = 0;
     // 0-based column within the line; may equal line.length() (insert after last char).
     std::size_t current_column = 0;
+    std::vector<EditorSnapshot> undo_stack;
+    std::vector<EditorSnapshot> redo_stack;
+    std::string find_needle;
+    bool find_active = false;
 };
 
 void editor_reset_cursor(EditorSession& session);
+
+void editor_clear_history(EditorSession& session);
+
+void editor_undo(EditorSession& session);
+
+void editor_redo(EditorSession& session);
 
 void write_to_current_line(EditorSession& session, const std::string& text);
 
@@ -40,7 +56,16 @@ bool delete_current_line(EditorSession& session);
 
 void delete_at_cursor(EditorSession& session);
 
+bool find_text(EditorSession& session, const std::string& needle);
+
+bool find_next(EditorSession& session);
+
+void yank_line(EditorSession& session);
+
+void paste_line(EditorSession& session);
+
+void show_cursor_position(const EditorSession& session);
+
 void show_note(const EditorSession& session);
 
-// For tests: render current line with a | at the cursor (no trailing newline).
 std::string format_line_with_cursor(const EditorSession& session, std::size_t line_index);

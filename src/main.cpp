@@ -53,6 +53,7 @@ bool open_note_by_key(EditorSession& session, const std::string& key) {
 	    const int id = std::stoi(key);
 	    if (open_note_by_id(session.note, id)) {
 		editor_reset_cursor(session);
+		editor_clear_history(session);
 		return true;
 	    }
 	    return false;
@@ -62,6 +63,7 @@ bool open_note_by_key(EditorSession& session, const std::string& key) {
     }
     if (open_note_by_title(session.note, key)) {
 	editor_reset_cursor(session);
+	editor_clear_history(session);
 	return true;
     }
     return false;
@@ -86,7 +88,11 @@ void print_usage() {
 	      << "insert <text>				insert text at the cursor\n"
 	      << "erase [char|word] [n]			delete before cursor (default: one char)\n"
 	      << "del					delete character at cursor (forward delete)\n"
+	      << "undo / redo				undo or redo the last body edit\n"
+	      << "find <text> / findnext		search forward from cursor\n"
+	      << "yank / paste				copy current line / insert after cursor\n"
 	      << "left / right / home / end		move cursor within the note\n"
+	      << "pos					show current line and column\n"
 	      << "goto <line> [col]			jump to line (and optional column, 1-based)\n"
 	      << "newline					split line at cursor, or insert blank line\n"
 	      << "delete line				remove the line at the cursor\n"
@@ -122,6 +128,7 @@ int main() {
     if (first_time) {
 	session.note = create_note(true);
 	editor_reset_cursor(session);
+	editor_clear_history(session);
     } else {
 	for (;;) {
 	    std::cout << "Welcome back. Would you like to open a note or create a note (open/create): \n";
@@ -148,6 +155,7 @@ int main() {
 	    if (line == "create") {
 		session.note = create_note(false);
 		editor_reset_cursor(session);
+		editor_clear_history(session);
 		break;
 	    }
 	    std::cout << "Please type open or create.\n";
@@ -205,6 +213,38 @@ int main() {
 
 	else if (fields[0] == "del") {
 	    delete_at_cursor(session);
+	}
+
+	else if (fields[0] == "undo") {
+	    editor_undo(session);
+	}
+
+	else if (fields[0] == "redo") {
+	    editor_redo(session);
+	}
+
+	else if (fields[0] == "find") {
+	    if (fields.size() < 2) {
+		std::cout << "Error: find needs text (find <text>).\n";
+		continue;
+	    }
+	    find_text(session, fields[1]);
+	}
+
+	else if (fields[0] == "findnext") {
+	    find_next(session);
+	}
+
+	else if (fields[0] == "yank") {
+	    yank_line(session);
+	}
+
+	else if (fields[0] == "paste") {
+	    paste_line(session);
+	}
+
+	else if (fields[0] == "pos") {
+	    show_cursor_position(session);
 	}
 
 	else if (fields[0] == "left") {
@@ -304,6 +344,7 @@ int main() {
 		    }
 		}
 		session = EditorSession{};
+		editor_clear_history(session);
 		std::cout << "Note removed from disk; in-memory note is cleared.\n";
 		continue;
 	    }
@@ -318,6 +359,7 @@ int main() {
 	    }
 	    session.note = create_note(false);
 	    editor_reset_cursor(session);
+	    editor_clear_history(session);
 	}
 
 	else if (fields[0] == "quit") {

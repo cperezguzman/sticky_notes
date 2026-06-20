@@ -43,12 +43,18 @@ From the repository root (so `notes/next_note_id.txt` and `notes/note_*.txt` are
 | `insert <text>` | Insert `text` at the **cursor** (column position). |
 | `erase` | Delete **one character before** the cursor (backspace). |
 | `del` | Delete the character **at** the cursor (forward delete). |
+| `undo` / `redo` | Undo or redo the last **body** edit (up to 100 steps). |
+| `find <text>` | Search forward from the cursor; wraps around the note. |
+| `findnext` | Jump to the next match of the last `find` query. |
+| `yank` | Copy the current line to an internal clipboard. |
+| `paste` | Insert the yanked line **after** the current line. |
 | `erase char` | Same as `erase`. |
 | `erase char <n>` | Delete up to `n` characters before the cursor. |
 | `erase word` | Delete the word immediately before the cursor. |
 | `erase word <n>` | Delete up to `n` words before the cursor. |
 | `left` / `right` | Move the cursor one column; crosses line boundaries at edges. |
 | `home` / `end` | Move to start / end of the current line. |
+| `pos` | Print the current line and column. |
 | `goto <line> [col]` | Jump to line (1-based); optional column (1-based, default 1). |
 | `newline` | Split the line at the cursor, or insert a blank line if at end. |
 | `delete line` | Remove the line at the cursor (does not delete the note file). |
@@ -106,7 +112,9 @@ Runs parser and timestamp parsing checks against `tests/fixtures/`.
 - [ ] `write hello` then `show` — line 1 shows `hello|` (cursor at end).
 - [ ] `goto 1 3` then `insert XX` — yields `heXXllo` on line 1.
 - [ ] `left` / `right` move across characters and line boundaries.
-- [ ] `erase` deletes the character **before** the cursor, not always at line end.
+- [ ] `undo` restores the previous body after `write` or `insert`.
+- [ ] `find world` jumps to a match; `findnext` finds the next one.
+- [ ] `yank` then `paste` duplicates the current line below.
 - [ ] `newline` on `hello|` splits into `hello` and `` (blank second line).
 - [ ] `append world` after `write hello` on the same line yields `helloworld`.
 - [ ] `newline` inserts a blank line after the cursor; `delete line` removes the current line.
@@ -122,4 +130,4 @@ Runs parser and timestamp parsing checks against `tests/fixtures/`.
 - One **active** note at a time; switching uses `open` / `create`.
 - **Titles** for `open` / `view` must match **exactly** when not using a numeric id.
 - Opening by id when the argument is all digits; titles that are only digits will be treated as ids.
-- No GUI, undo stack, or forward-delete—by design for this version.
+- No GUI or forward-delete beyond `del`—by design for this version.
