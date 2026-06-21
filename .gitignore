@@ -14,9 +14,13 @@ test_runner
 # Stored notes
 notes/
 
-# Local developer tooling (Obsidian vault, Cursor MCP — not for GitHub)
+# Local developer tooling (not for GitHub)
+# Obsidian vault, docs/agents/, docs/adr/
 docs/
+# Cursor MCP config
 .cursor/
+AGENTS.md
+
 .env
 .env.example
 
