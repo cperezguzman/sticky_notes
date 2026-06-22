@@ -30,6 +30,9 @@ void print_note_by_id(int id);
 
 sticky_note create_note(bool first_time);
 
+// Create and persist a note without terminal prompts (GUI / tests).
+sticky_note create_note_silent(const std::string& title);
+
 // Creates notes/ and notes/next_note_id.txt (with "0") when missing.
 void ensure_notes_data_dir();
 

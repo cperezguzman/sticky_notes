@@ -355,6 +355,31 @@ EditStatus move_right(EditorSession& session) {
     return EditStatus::Ok;
 }
 
+EditStatus move_up(EditorSession& session) {
+    if (session.current_line == 0) {
+	return EditStatus::AtStart;
+    }
+
+    const std::size_t target_col = session.current_column;
+    --session.current_line;
+    const std::size_t len = current_line_length(session);
+    session.current_column = std::min(target_col, len);
+    return EditStatus::Ok;
+}
+
+EditStatus move_down(EditorSession& session) {
+    const std::size_t target_col = session.current_column;
+    const auto next_line = session.current_line + 1;
+    if (next_line > session.note.text.size()) {
+	return EditStatus::AtEnd;
+    }
+
+    session.current_line = next_line;
+    const std::size_t len = current_line_length(session);
+    session.current_column = std::min(target_col, len);
+    return EditStatus::Ok;
+}
+
 EditStatus move_home(EditorSession& session) {
     session.current_column = 0;
     return EditStatus::Ok;
@@ -386,6 +411,23 @@ void insert_newline_at_cursor(EditorSession& session) {
     session.current_line += 1;
     session.current_column = 0;
     touch_edit(session);
+}
+
+EditStatus join_with_previous_line(EditorSession& session) {
+    if (!current_line_exists(session) || session.current_line == 0) {
+	return EditStatus::NothingBeforeCursor;
+    }
+
+    editor_push_undo(session);
+    std::string& prev = session.note.text[session.current_line - 1];
+    const std::size_t join_at = prev.size();
+    prev += current_line_ref(session);
+    session.note.text.erase(session.note.text.begin()
+			    + static_cast<std::ptrdiff_t>(session.current_line));
+    session.current_line -= 1;
+    session.current_column = join_at;
+    touch_edit(session);
+    return EditStatus::Ok;
 }
 
 EditStatus delete_current_line(EditorSession& session) {

@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <string>
 
-// Platform-neutral key events for the single-line textbox seam.
+// Platform-neutral key events for the multiline textbox seam.
 // SDL (or any frontend) translates raw input into these before calling textbox_apply_key.
 
 enum class TextboxKeyKind {
@@ -14,8 +14,11 @@ enum class TextboxKeyKind {
     Delete,
     Left,
     Right,
+    Up,
+    Down,
     Home,
     End,
+    Newline,
 };
 
 struct TextboxKeyEvent {
@@ -23,13 +26,27 @@ struct TextboxKeyEvent {
     char32_t character = 0;
 };
 
-// Ensures the session is a single-line textbox (line 0, empty body if needed).
+// Scroll state for multiline body rendering (clip / scroll).
+struct TextboxViewport {
+    std::size_t first_visible_line = 0;
+};
+
+// One empty body line; same EditorSession shape as the terminal editor.
 void textbox_init_session(EditorSession& session);
 
-// Applies one key event through the existing editor core. Returns false if ignored.
 bool textbox_apply_key(EditorSession& session, TextboxKeyEvent event);
 
-// Current line text and 0-based cursor column for rendering.
-std::string textbox_line_text(const EditorSession& session);
+std::size_t textbox_line_count(const EditorSession& session);
+
+std::string textbox_line_at(const EditorSession& session, std::size_t line_index);
+
+std::size_t textbox_cursor_line(const EditorSession& session);
 
 std::size_t textbox_cursor_column(const EditorSession& session);
+
+// Current line text (convenience for single-line callers and tests).
+std::string textbox_line_text(const EditorSession& session);
+
+// Keep cursor row inside the visible window (call after key handling).
+void textbox_scroll_to_cursor(TextboxViewport& viewport, const EditorSession& session,
+			      std::size_t visible_line_count);

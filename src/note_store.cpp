@@ -1,6 +1,6 @@
 #include "note_store.h"
 
-#include "parser.h"
+#include "note_file_codec.h"
 
 #include <chrono>
 #include <filesystem>
@@ -35,6 +35,42 @@ void write_new_note_file(const sticky_note& sn) {
 	out << t << "\n";
     }
 }
+
+bool apply_parsed_note(sticky_note& sn, const ParsedNoteFile& parsed, const std::string& path) {
+    if (parsed.title.empty() || parsed.id.empty()) {
+	return false;
+    }
+
+    sn = sticky_note{};
+    sn.title = parsed.title;
+    try {
+	sn.id = std::stoi(parsed.id);
+    } catch (const std::exception&) {
+	return false;
+    }
+    sn.note_path = path;
+    sn.text = body_lines_from_parsed(parsed);
+
+    const auto now = std::chrono::system_clock::now();
+    sn.created = now;
+    sn.last_edited = now;
+    if (!parsed.created_line.empty()) {
+	std::chrono::system_clock::time_point t;
+	if (parse_saved_timestamp_line(parsed.created_line, t)) {
+	    sn.created = t;
+	}
+    }
+    if (!parsed.last_edited_line.empty()) {
+	std::chrono::system_clock::time_point t;
+	if (parse_saved_timestamp_line(parsed.last_edited_line, t)) {
+	    sn.last_edited = t;
+	}
+    }
+    if (sn.last_edited < sn.created) {
+	sn.last_edited = sn.created;
+    }
+    return true;
+}
 } // namespace
 
 NoteIndex build_note_index() {
@@ -53,24 +89,19 @@ NoteIndex build_note_index() {
 	}
 
 	std::ifstream in(entry.path());
-	bool ok = true;
-	const std::vector<std::string> file_info = parse_file_info(in, ok);
-
-	if (!ok) {
-	    continue;
-	}
-	if (file_info.size() < 2 || file_info[1].empty()) {
+	ParsedNoteFile parsed{};
+	if (!parse_note_file(in, parsed) || parsed.id.empty()) {
 	    continue;
 	}
 
 	int note_id = 0;
 	try {
-	    note_id = std::stoi(file_info[1]);
+	    note_id = std::stoi(parsed.id);
 	} catch (const std::exception&) {
 	    continue;
 	}
 
-	titles[note_id] = file_info[0];
+	titles[note_id] = parsed.title;
 	paths[note_id] = entry.path().string();
     }
 
@@ -107,48 +138,11 @@ const std::string* find_path_by_id(const NoteIndex& idx, int id) {
 
 bool load_note_from_path(sticky_note& sn, const std::string& path) {
     std::ifstream in(path);
-    bool ok = true;
-    const std::vector<std::string> fi = parse_file_info(in, ok);
-    if (!ok || fi[0].empty() || fi[1].empty()) {
+    ParsedNoteFile parsed{};
+    if (!parse_note_file(in, parsed)) {
 	return false;
     }
-
-    sn = sticky_note{};
-    sn.title = fi[0];
-    try {
-	sn.id = std::stoi(fi[1]);
-    } catch (const std::exception&) {
-	return false;
-    }
-    sn.note_path = path;
-    sn.text.clear();
-    if (fi.size() > 4) {
-	std::istringstream body(fi[4]);
-	std::string bline;
-	while (std::getline(body, bline)) {
-	    sn.text.push_back(bline);
-	}
-    }
-
-    const auto now = std::chrono::system_clock::now();
-    sn.created = now;
-    sn.last_edited = now;
-    if (fi.size() > 2 && !fi[2].empty()) {
-	std::chrono::system_clock::time_point t;
-	if (parse_saved_timestamp_line(fi[2], t)) {
-	    sn.created = t;
-	}
-    }
-    if (fi.size() > 3 && !fi[3].empty()) {
-	std::chrono::system_clock::time_point t;
-	if (parse_saved_timestamp_line(fi[3], t)) {
-	    sn.last_edited = t;
-	}
-    }
-    if (sn.last_edited < sn.created) {
-	sn.last_edited = sn.created;
-    }
-    return true;
+    return apply_parsed_note(sn, parsed, path);
 }
 
 void save_note(const sticky_note& sn) {
@@ -198,16 +192,13 @@ bool open_note_by_id(sticky_note& sn, int id) {
 
 static void print_note_body(const std::string& label, const std::string& path) {
     std::ifstream in(path);
-    bool ok = true;
-    const auto fi = parse_file_info(in, ok);
-    if (!ok) {
+    ParsedNoteFile parsed{};
+    if (!parse_note_file(in, parsed)) {
 	std::cout << "Could not read that note file.\n";
 	return;
     }
     std::cout << "--- " << label << " ---\n";
-    if (fi.size() > 4) {
-	std::cout << fi[4] << "\n";
-    }
+    std::cout << parsed.body << "\n";
 }
 
 void print_note_by_title(const std::string& title) {
@@ -231,8 +222,6 @@ void print_note_by_id(int id) {
 }
 
 sticky_note create_note(bool first_time) {
-    sticky_note sn;
-
     if (first_time) {
 	std::cout << "Welcome to Sticky_Note.V1 [Terminal Draft]! This is my starter sticky note project.\n"
 		  << "Since it appears to be your first time using this program, I'll automatically create a note for you.\n";
@@ -244,7 +233,12 @@ sticky_note create_note(bool first_time) {
     std::string title;
     std::getline(std::cin, title);
 
-    set_title(sn, title);
+    return create_note_silent(title);
+}
+
+sticky_note create_note_silent(const std::string& title) {
+    sticky_note sn;
+    set_title(sn, title.empty() ? "Untitled" : title);
 
     std::ifstream in("notes/next_note_id.txt");
     std::string count;
@@ -252,7 +246,6 @@ sticky_note create_note(bool first_time) {
 
     set_noteid(sn, count);
     write_new_note_file(sn);
-
     return sn;
 }
 

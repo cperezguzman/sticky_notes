@@ -1,4 +1,5 @@
 #include "note_editor.h"
+#include "note_file_codec.h"
 #include "note_store.h"
 #include "parser.h"
 #include "sticky_note.h"
@@ -35,15 +36,26 @@ void test_parse_command_goto() {
     check(fields[1] == "3", "goto line number");
 }
 
-void test_parse_file_info_fixture() {
+void test_parse_note_file_fixture() {
     std::ifstream in("tests/fixtures/note_sample.txt");
-    bool ok = false;
-    const auto fi = parse_file_info(in, ok);
-    check(ok, "fixture parses");
-    check(fi.size() >= 5, "fixture has five slots");
-    check(fi[0] == "Sample Title", "fixture title");
-    check(fi[1] == "42", "fixture id");
-    check(fi[4] == "line one\nline two", "fixture body");
+    ParsedNoteFile parsed{};
+    check(parse_note_file(in, parsed), "fixture parses");
+    check(parsed.title == "Sample Title", "fixture title");
+    check(parsed.id == "42", "fixture id");
+    check(parsed.body == "line one\nline two", "fixture body");
+}
+
+void test_parse_note_file_malformed() {
+    const std::string path = "exports/test_malformed_note.txt";
+    ensure_markdown_export_dir();
+    {
+	std::ofstream out(path);
+	out << "Title:\nGood\nGarbage:\n";
+    }
+    std::ifstream bad(path);
+    ParsedNoteFile parsed{};
+    check(!parse_note_file(bad, parsed), "malformed file rejected");
+    std::filesystem::remove(path);
 }
 
 void test_parse_saved_timestamp_line() {
@@ -216,12 +228,57 @@ void test_textbox_backspace_and_navigation() {
     textbox_apply_key(session, {TextboxKeyKind::End, 0});
     check(textbox_cursor_column(session) == 2, "textbox end");
 }
+
+void test_textbox_multiline_newline_and_arrows() {
+    EditorSession session{};
+    textbox_init_session(session);
+    textbox_apply_key(session, {TextboxKeyKind::Character, U'a'});
+    textbox_apply_key(session, {TextboxKeyKind::Newline, 0});
+    textbox_apply_key(session, {TextboxKeyKind::Character, U'b'});
+    check(textbox_line_count(session) == 2, "newline creates second line");
+    check(textbox_line_at(session, 0) == "a", "first line after split");
+    check(textbox_line_at(session, 1) == "b", "second line after split");
+    check(textbox_cursor_line(session) == 1, "cursor on second line");
+
+    textbox_apply_key(session, {TextboxKeyKind::Up, 0});
+    check(textbox_cursor_line(session) == 0, "up moves to first line");
+    textbox_apply_key(session, {TextboxKeyKind::Down, 0});
+    check(textbox_cursor_line(session) == 1, "down moves to second line");
+}
+
+void test_textbox_join_lines_on_backspace() {
+    EditorSession session{};
+    textbox_init_session(session);
+    textbox_apply_key(session, {TextboxKeyKind::Character, U'h'});
+    textbox_apply_key(session, {TextboxKeyKind::Character, U'i'});
+    textbox_apply_key(session, {TextboxKeyKind::Newline, 0});
+    textbox_apply_key(session, {TextboxKeyKind::Character, U'!'});
+    check(textbox_line_count(session) == 2, "two lines before join");
+
+    textbox_apply_key(session, {TextboxKeyKind::Home, 0});
+    textbox_apply_key(session, {TextboxKeyKind::Backspace, 0});
+    check(textbox_line_count(session) == 1, "backspace at line start merges");
+    check(textbox_line_at(session, 0) == "hi!", "merged line text");
+    check(textbox_cursor_column(session) == 2, "cursor at join point");
+}
+
+void test_move_up_down() {
+    EditorSession session{};
+    write_to_current_line(session, "ab");
+    insert_newline_at_cursor(session);
+    insert_at_cursor(session, "c");
+    check(move_up(session) == EditStatus::Ok, "move up ok");
+    check(session.current_line == 0, "on first line");
+    check(move_down(session) == EditStatus::Ok, "move down ok");
+    check(session.current_line == 1, "on second line");
+}
 } // namespace
 
 int main() {
     test_parse_command_write_rest_of_line();
     test_parse_command_goto();
-    test_parse_file_info_fixture();
+    test_parse_note_file_fixture();
+    test_parse_note_file_malformed();
     test_parse_saved_timestamp_line();
     test_parse_saved_timestamp_invalid();
     test_append_to_current_line();
@@ -238,6 +295,9 @@ int main() {
     test_export_note_to_markdown();
     test_textbox_init_and_type();
     test_textbox_backspace_and_navigation();
+    test_textbox_multiline_newline_and_arrows();
+    test_textbox_join_lines_on_backspace();
+    test_move_up_down();
 
     if (failures == 0) {
 	std::cout << "All tests passed.\n";

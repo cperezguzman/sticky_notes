@@ -90,10 +90,12 @@ src/
   note_editor.cpp/.h    — silent edit core (`EditStatus`, typed erase API)
   note_editor_cli.cpp/.h — terminal presentation adapter
   note_store.cpp/.h     — load/save, list, open/view by title or id
-  parser.cpp/.h      — command parsing; note file parsing
+  parser.cpp/.h      — CLI command parsing
+  note_file_codec.*  — on-disk note file format (`ParsedNoteFile`)
   sticky_note.cpp/.h — `sticky_note` struct; timestamps
-  textbox_input.*    — platform-neutral single-line key seam (Phase 2)
-  textbox_sdl.*      — SDL3 adapter + render (Phase 2)
+  textbox_input.*    — platform-neutral multiline key seam (Phase 2–3)
+  textbox_sdl.*      — SDL3 adapter + panel render
+  sticky_gui.*       — Phase 4: multiple panels, drag, resize, load/save
 sandbox/
   textbox_main.cpp   — Phase 2 SDL3 window loop
 scripts/
@@ -125,6 +127,26 @@ make smoke
 
 Single-line GUI textbox using **SDL3** and the same `EditorSession` / editor core as the CLI — no toolkit text widget.
 
+## Phase 3 — Multiline sticky-note panel
+
+Multiline textbox in one **sticky-note panel** (title bar + scrollable body). Same `EditorSession` / `note.text` lines as the terminal.
+
+## Phase 4 — Multi-note GUI (in progress)
+
+`./textbox_sandbox` is now a small sticky-notes desk:
+
+| Input | Action |
+|-------|--------|
+| **Click panel** | Focus (brings to front) |
+| **Drag title bar** | Move panel |
+| **Drag bottom-right grip** | Resize focused panel |
+| **Ctrl+N** | New note (saved to `notes/`) |
+| **Ctrl+W** | Close focused panel (saves first) |
+| **Ctrl+S** | Save focused note |
+| **Esc** / window **X** | Quit (saves all notes with paths) |
+
+On startup, loads every note from `notes/` (up to 8). Uses the same on-disk format as the CLI.
+
 **One-time:** build SDL3 into `third_party/` (gitignored):
 
 ```bash
@@ -138,7 +160,19 @@ make textbox
 ./textbox_sandbox
 ```
 
-Type to insert; **Backspace** / **Delete**; arrow keys; **Home** / **End**; **Esc** to quit (or close the window). Rendering uses SDL’s debug bitmap font (`SDL_RenderDebugText`); input goes through `textbox_apply_key` → `insert_at_cursor` / `move_left` / etc.
+| Input | Action |
+|-------|--------|
+| Type | Insert at cursor |
+| **Enter** | Split line at cursor (`newline`) |
+| **Backspace** at line start | Merge with previous line |
+| **Backspace** / **Delete** | Erase before / at cursor |
+| **Arrow keys** | Move cursor (including across lines) |
+| **Home** / **End** | Start / end of current line |
+| **Esc** or window **X** | Quit |
+
+Rendering uses SDL’s debug bitmap font (`SDL_RenderDebugText`). Body lines outside the panel clip via scroll (`TextboxViewport`). Input: `textbox_apply_key` → silent `note_editor` core.
+
+Phase 2 single-line `textbox_render` was replaced by `textbox_render_panel` for Phase 3.
 
 ## Manual test checklist
 

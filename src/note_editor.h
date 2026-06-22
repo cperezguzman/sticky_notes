@@ -72,11 +72,17 @@ EditStatus move_left(EditorSession& session);
 
 EditStatus move_right(EditorSession& session);
 
+EditStatus move_up(EditorSession& session);
+
+EditStatus move_down(EditorSession& session);
+
 EditStatus move_home(EditorSession& session);
 
 EditStatus move_end(EditorSession& session);
 
 void insert_newline_at_cursor(EditorSession& session);
+
+EditStatus join_with_previous_line(EditorSession& session);
 
 EditStatus delete_current_line(EditorSession& session);
 
