@@ -9,6 +9,7 @@
 # Build output
 sticky_notes
 test_runner
+textbox_sandbox
 *.o
 
 # Stored notes
@@ -26,3 +27,6 @@ AGENTS.md
 
 # Markdown exports (regenerate with export markdown)
 exports/
+
+# Vendored SDL3 build (run scripts/build-sdl3.sh)
+third_party/

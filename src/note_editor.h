@@ -24,13 +24,35 @@ struct EditorSession {
     bool find_active = false;
 };
 
+enum class EditStatus {
+    Ok,
+    NothingToUndo,
+    NothingToRedo,
+    NoLineAtCursor,
+    NothingBeforeCursor,
+    NothingAtCursor,
+    AtStart,
+    AtEnd,
+    EmptyNeedle,
+    NoTextToSearch,
+    NotFound,
+    FindNotActive,
+    NoMoreMatches,
+    NoLineToYank,
+    ClipboardEmpty,
+    LineNumberTooSmall,
+    ColumnNumberTooSmall,
+    LineOutOfRange,
+    ColumnOutOfRange,
+};
+
 void editor_reset_cursor(EditorSession& session);
 
 void editor_clear_history(EditorSession& session);
 
-void editor_undo(EditorSession& session);
+EditStatus editor_undo(EditorSession& session);
 
-void editor_redo(EditorSession& session);
+EditStatus editor_redo(EditorSession& session);
 
 void write_to_current_line(EditorSession& session, const std::string& text);
 
@@ -38,34 +60,38 @@ void append_to_current_line(EditorSession& session, const std::string& text);
 
 void insert_at_cursor(EditorSession& session, const std::string& text);
 
-void erase_from_current_line(EditorSession& session, const std::vector<std::string>& fields);
+EditStatus erase_char_before(EditorSession& session);
 
-bool goto_line(EditorSession& session, int line_1based, int col_1based = 1);
+EditStatus erase_chars_before(EditorSession& session, int n_chars);
 
-void move_left(EditorSession& session);
+EditStatus erase_words_before(EditorSession& session, int n_words);
 
-void move_right(EditorSession& session);
+EditStatus goto_line(EditorSession& session, int line_1based, int col_1based = 1);
 
-void move_home(EditorSession& session);
+EditStatus move_left(EditorSession& session);
 
-void move_end(EditorSession& session);
+EditStatus move_right(EditorSession& session);
+
+EditStatus move_home(EditorSession& session);
+
+EditStatus move_end(EditorSession& session);
 
 void insert_newline_at_cursor(EditorSession& session);
 
-bool delete_current_line(EditorSession& session);
+EditStatus delete_current_line(EditorSession& session);
 
-void delete_at_cursor(EditorSession& session);
+EditStatus delete_at_cursor(EditorSession& session);
 
 bool find_text(EditorSession& session, const std::string& needle);
 
 bool find_next(EditorSession& session);
 
-void yank_line(EditorSession& session);
+EditStatus yank_line(EditorSession& session);
 
-void paste_line(EditorSession& session);
+EditStatus paste_line(EditorSession& session);
 
-void show_cursor_position(const EditorSession& session);
+std::string format_cursor_position(const EditorSession& session);
 
-void show_note(const EditorSession& session);
+std::string format_note_for_display(const EditorSession& session);
 
 std::string format_line_with_cursor(const EditorSession& session, std::size_t line_index);

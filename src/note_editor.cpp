@@ -3,26 +3,12 @@
 #include <algorithm>
 #include <climits>
 #include <cstddef>
-#include <iostream>
 #include <sstream>
 
 namespace {
 constexpr std::size_t kMaxUndoDepth = 100;
 
 std::string g_line_clipboard;
-
-bool parse_positive_int(const std::string& s, int& out) {
-    try {
-	const long v = std::stol(s);
-	if (v <= 0 || v > static_cast<long>(INT_MAX)) {
-	    return false;
-	}
-	out = static_cast<int>(v);
-	return true;
-    } catch (const std::exception&) {
-	return false;
-    }
-}
 
 bool current_line_exists(const EditorSession& session) {
     return session.current_line < session.note.text.size();
@@ -74,7 +60,7 @@ void editor_push_undo(EditorSession& session) {
     session.redo_stack.clear();
 }
 
-void erase_word_before_cursor(std::string& line, std::size_t& col) {
+void erase_word_before_in_line(std::string& line, std::size_t& col) {
     if (col == 0) {
 	return;
     }
@@ -96,7 +82,7 @@ void erase_word_before_cursor(std::string& line, std::size_t& col) {
     col = start;
 }
 
-void erase_chars_before_cursor(std::string& line, std::size_t& col, int n_chars) {
+void erase_chars_before_in_line(std::string& line, std::size_t& col, int n_chars) {
     if (n_chars <= 0 || col == 0) {
 	return;
     }
@@ -145,9 +131,11 @@ bool search_from(EditorSession& session, const std::string& needle, std::size_t 
 }
 } // namespace
 
-void show_cursor_position(const EditorSession& session) {
-    std::cout << "Cursor on line " << (session.current_line + 1)
-	      << ", column " << (session.current_column + 1) << ".\n";
+std::string format_cursor_position(const EditorSession& session) {
+    std::ostringstream out;
+    out << "Cursor on line " << (session.current_line + 1)
+	<< ", column " << (session.current_column + 1) << ".";
+    return out.str();
 }
 
 void editor_reset_cursor(EditorSession& session) {
@@ -167,32 +155,28 @@ void editor_clear_history(EditorSession& session) {
     session.find_active = false;
 }
 
-void editor_undo(EditorSession& session) {
+EditStatus editor_undo(EditorSession& session) {
     if (session.undo_stack.empty()) {
-	std::cout << "Nothing to undo.\n";
-	return;
+	return EditStatus::NothingToUndo;
     }
 
     session.redo_stack.push_back(make_snapshot(session));
     const EditorSnapshot snap = session.undo_stack.back();
     session.undo_stack.pop_back();
     apply_snapshot(session, snap);
-    std::cout << "Undone.\n";
-    show_cursor_position(session);
+    return EditStatus::Ok;
 }
 
-void editor_redo(EditorSession& session) {
+EditStatus editor_redo(EditorSession& session) {
     if (session.redo_stack.empty()) {
-	std::cout << "Nothing to redo.\n";
-	return;
+	return EditStatus::NothingToRedo;
     }
 
     session.undo_stack.push_back(make_snapshot(session));
     const EditorSnapshot snap = session.redo_stack.back();
     session.redo_stack.pop_back();
     apply_snapshot(session, snap);
-    std::cout << "Redone.\n";
-    show_cursor_position(session);
+    return EditStatus::Ok;
 }
 
 void write_to_current_line(EditorSession& session, const std::string& text) {
@@ -236,183 +220,149 @@ void insert_at_cursor(EditorSession& session, const std::string& text) {
     touch_edit(session);
 }
 
-void erase_from_current_line(EditorSession& session, const std::vector<std::string>& fields) {
+EditStatus erase_char_before(EditorSession& session) {
     if (!current_line_exists(session)) {
-	std::cout << "Error: No line at the cursor to erase. Use goto or write first.\n";
-	return;
+	return EditStatus::NoLineAtCursor;
     }
 
     clamp_column_to_line(session);
     std::string& line = current_line_ref(session);
 
-    if (fields.size() == 1) {
-	if (session.current_column == 0) {
-	    std::cout << "Error: Nothing before the cursor to erase.\n";
-	    return;
-	}
-	editor_push_undo(session);
-	line.erase(session.current_column - 1, 1);
-	--session.current_column;
-	std::cout << "Deleted character before cursor.\n";
-	touch_edit(session);
-	return;
+    if (session.current_column == 0) {
+	return EditStatus::NothingBeforeCursor;
     }
 
-    if (fields[1] == "char") {
-	if (fields.size() == 2) {
-	    if (session.current_column == 0) {
-		std::cout << "Error: Nothing before the cursor to erase.\n";
-		return;
-	    }
-	    editor_push_undo(session);
-	    line.erase(session.current_column - 1, 1);
-	    --session.current_column;
-	    std::cout << "Deleted character before cursor.\n";
-	    touch_edit(session);
-	    return;
-	}
-
-	if (fields.size() == 3) {
-	    int n_chars = 0;
-	    if (!parse_positive_int(fields[2], n_chars)) {
-		std::cout << "Error: Invalid character count.\n";
-		return;
-	    }
-	    editor_push_undo(session);
-	    erase_chars_before_cursor(line, session.current_column, n_chars);
-	    std::cout << "Deleted " << n_chars << " character(s) before cursor.\n";
-	    touch_edit(session);
-	    return;
-	}
-
-	std::cout << "Error: Too many arguments for erase char.\n";
-	return;
-    }
-
-    if (fields[1] == "word") {
-	int n_words = 1;
-	if (fields.size() == 3) {
-	    if (!parse_positive_int(fields[2], n_words)) {
-		std::cout << "Error: Invalid word count.\n";
-		return;
-	    }
-	} else if (fields.size() > 3) {
-	    std::cout << "Error: Too many arguments for erase word.\n";
-	    return;
-	}
-
-	const std::size_t col_before = session.current_column;
-	std::string trial = line;
-	std::size_t trial_col = session.current_column;
-	for (int i = 0; i < n_words; ++i) {
-	    if (trial_col == 0) {
-		break;
-	    }
-	    const std::size_t before = trial_col;
-	    erase_word_before_cursor(trial, trial_col);
-	    if (trial_col == before) {
-		break;
-	    }
-	}
-
-	if (trial_col == col_before) {
-	    std::cout << "Error: No word before the cursor to erase.\n";
-	    return;
-	}
-
-	editor_push_undo(session);
-	line = std::move(trial);
-	session.current_column = trial_col;
-	std::cout << "Deleted word(s) before cursor.\n";
-	touch_edit(session);
-	return;
-    }
-
-    std::cout << "Error: Second argument to erase must be 'char' or 'word'.\n";
+    editor_push_undo(session);
+    line.erase(session.current_column - 1, 1);
+    --session.current_column;
+    touch_edit(session);
+    return EditStatus::Ok;
 }
 
-bool goto_line(EditorSession& session, int line_1based, int col_1based) {
+EditStatus erase_chars_before(EditorSession& session, int n_chars) {
+    if (!current_line_exists(session)) {
+	return EditStatus::NoLineAtCursor;
+    }
+
+    clamp_column_to_line(session);
+    std::string& line = current_line_ref(session);
+
+    if (session.current_column == 0 || n_chars <= 0) {
+	return EditStatus::NothingBeforeCursor;
+    }
+
+    editor_push_undo(session);
+    erase_chars_before_in_line(line, session.current_column, n_chars);
+    touch_edit(session);
+    return EditStatus::Ok;
+}
+
+EditStatus erase_words_before(EditorSession& session, int n_words) {
+    if (!current_line_exists(session)) {
+	return EditStatus::NoLineAtCursor;
+    }
+    if (n_words <= 0) {
+	return EditStatus::NothingBeforeCursor;
+    }
+
+    clamp_column_to_line(session);
+    std::string& line = current_line_ref(session);
+
+    const std::size_t col_before = session.current_column;
+    std::string trial = line;
+    std::size_t trial_col = session.current_column;
+    for (int i = 0; i < n_words; ++i) {
+	if (trial_col == 0) {
+	    break;
+	}
+	const std::size_t before = trial_col;
+	erase_word_before_in_line(trial, trial_col);
+	if (trial_col == before) {
+	    break;
+	}
+    }
+
+    if (trial_col == col_before) {
+	return EditStatus::NothingBeforeCursor;
+    }
+
+    editor_push_undo(session);
+    line = std::move(trial);
+    session.current_column = trial_col;
+    touch_edit(session);
+    return EditStatus::Ok;
+}
+
+EditStatus goto_line(EditorSession& session, int line_1based, int col_1based) {
     if (line_1based < 1) {
-	std::cout << "Error: Line numbers start at 1.\n";
-	return false;
+	return EditStatus::LineNumberTooSmall;
     }
     if (col_1based < 1) {
-	std::cout << "Error: Column numbers start at 1.\n";
-	return false;
+	return EditStatus::ColumnNumberTooSmall;
     }
 
     const auto line_count = session.note.text.size();
     const auto max_goto = line_count + 1;
     if (static_cast<std::size_t>(line_1based) > max_goto) {
-	std::cout << "Error: Line " << line_1based << " is out of range (1–"
-		  << max_goto << ").\n";
-	return false;
+	return EditStatus::LineOutOfRange;
     }
 
     session.current_line = static_cast<std::size_t>(line_1based - 1);
 
     if (!current_line_exists(session)) {
 	session.current_column = 0;
-	std::cout << "Cursor on line " << line_1based << " (new line), column 1.\n";
-	return true;
+	return EditStatus::Ok;
     }
 
     const std::size_t max_col = current_line_length(session);
     const std::size_t col_0 = static_cast<std::size_t>(col_1based - 1);
     if (col_0 > max_col) {
-	std::cout << "Error: Column " << col_1based << " is out of range (1–"
-		  << (max_col + 1) << ") on line " << line_1based << ".\n";
-	return false;
+	return EditStatus::ColumnOutOfRange;
     }
 
     session.current_column = col_0;
-    show_cursor_position(session);
-    return true;
+    return EditStatus::Ok;
 }
 
-void move_left(EditorSession& session) {
+EditStatus move_left(EditorSession& session) {
     if (current_line_exists(session) && session.current_column > 0) {
 	--session.current_column;
-	show_cursor_position(session);
-	return;
+	return EditStatus::Ok;
     }
 
     if (session.current_line == 0) {
-	std::cout << "Already at start of note.\n";
-	return;
+	return EditStatus::AtStart;
     }
 
     --session.current_line;
     session.current_column = current_line_length(session);
-    show_cursor_position(session);
+    return EditStatus::Ok;
 }
 
-void move_right(EditorSession& session) {
+EditStatus move_right(EditorSession& session) {
     if (current_line_exists(session) && session.current_column < current_line_length(session)) {
 	++session.current_column;
-	show_cursor_position(session);
-	return;
+	return EditStatus::Ok;
     }
 
     const auto next_line = session.current_line + 1;
     if (next_line > session.note.text.size()) {
-	std::cout << "Already at end of note.\n";
-	return;
+	return EditStatus::AtEnd;
     }
 
     session.current_line = next_line;
-    session.current_column = current_line_exists(session) ? 0 : 0;
-    show_cursor_position(session);
-}
-
-void move_home(EditorSession& session) {
     session.current_column = 0;
-    show_cursor_position(session);
+    return EditStatus::Ok;
 }
 
-void move_end(EditorSession& session) {
+EditStatus move_home(EditorSession& session) {
+    session.current_column = 0;
+    return EditStatus::Ok;
+}
+
+EditStatus move_end(EditorSession& session) {
     session.current_column = current_line_length(session);
-    show_cursor_position(session);
+    return EditStatus::Ok;
 }
 
 void insert_newline_at_cursor(EditorSession& session) {
@@ -422,7 +372,6 @@ void insert_newline_at_cursor(EditorSession& session) {
 	session.current_line = session.note.text.size() - 1;
 	session.current_column = 0;
 	touch_edit(session);
-	show_cursor_position(session);
 	return;
     }
 
@@ -437,13 +386,11 @@ void insert_newline_at_cursor(EditorSession& session) {
     session.current_line += 1;
     session.current_column = 0;
     touch_edit(session);
-    show_cursor_position(session);
 }
 
-bool delete_current_line(EditorSession& session) {
+EditStatus delete_current_line(EditorSession& session) {
     if (!current_line_exists(session)) {
-	std::cout << "Error: No line at the cursor to delete.\n";
-	return false;
+	return EditStatus::NoLineAtCursor;
     }
 
     editor_push_undo(session);
@@ -461,36 +408,31 @@ bool delete_current_line(EditorSession& session) {
     }
 
     touch_edit(session);
-    show_cursor_position(session);
-    return true;
+    return EditStatus::Ok;
 }
 
-void delete_at_cursor(EditorSession& session) {
+EditStatus delete_at_cursor(EditorSession& session) {
     if (!current_line_exists(session)) {
-	std::cout << "Error: No line at the cursor.\n";
-	return;
+	return EditStatus::NoLineAtCursor;
     }
 
     clamp_column_to_line(session);
     std::string& line = current_line_ref(session);
     if (session.current_column >= line.size()) {
-	std::cout << "Error: Nothing at the cursor to delete.\n";
-	return;
+	return EditStatus::NothingAtCursor;
     }
 
     editor_push_undo(session);
     line.erase(session.current_column, 1);
     touch_edit(session);
-    std::cout << "Deleted character at cursor.\n";
+    return EditStatus::Ok;
 }
 
 bool find_text(EditorSession& session, const std::string& needle) {
     if (needle.empty()) {
-	std::cout << "Error: find needs non-empty text.\n";
 	return false;
     }
     if (session.note.text.empty()) {
-	std::cout << "No text to search.\n";
 	return false;
     }
 
@@ -499,19 +441,11 @@ bool find_text(EditorSession& session, const std::string& needle) {
 
     const std::size_t wrap_line = session.current_line;
     const std::size_t wrap_col = session.current_column;
-    if (search_from(session, needle, wrap_line, wrap_col, wrap_line, wrap_col)) {
-	std::cout << "Match found.\n";
-	show_cursor_position(session);
-	return true;
-    }
-
-    std::cout << "Not found.\n";
-    return false;
+    return search_from(session, needle, wrap_line, wrap_col, wrap_line, wrap_col);
 }
 
 bool find_next(EditorSession& session) {
     if (!session.find_active || session.find_needle.empty()) {
-	std::cout << "Run find <text> first.\n";
 	return false;
     }
 
@@ -527,30 +461,21 @@ bool find_next(EditorSession& session) {
 	start_line = (start_line + 1) % session.note.text.size();
     }
 
-    if (search_from(session, needle, start_line, start_col, wrap_line, wrap_col)) {
-	std::cout << "Match found.\n";
-	show_cursor_position(session);
-	return true;
-    }
-
-    std::cout << "No more matches.\n";
-    return false;
+    return search_from(session, needle, start_line, start_col, wrap_line, wrap_col);
 }
 
-void yank_line(EditorSession& session) {
+EditStatus yank_line(EditorSession& session) {
     if (!current_line_exists(session)) {
-	std::cout << "Error: No line to yank.\n";
-	return;
+	return EditStatus::NoLineToYank;
     }
 
     g_line_clipboard = session.note.text[session.current_line];
-    std::cout << "Line yanked.\n";
+    return EditStatus::Ok;
 }
 
-void paste_line(EditorSession& session) {
+EditStatus paste_line(EditorSession& session) {
     if (g_line_clipboard.empty()) {
-	std::cout << "Error: Yank a line first (yank).\n";
-	return;
+	return EditStatus::ClipboardEmpty;
     }
 
     editor_push_undo(session);
@@ -565,8 +490,7 @@ void paste_line(EditorSession& session) {
     session.current_line = insert_at;
     session.current_column = g_line_clipboard.size();
     touch_edit(session);
-    std::cout << "Line pasted.\n";
-    show_cursor_position(session);
+    return EditStatus::Ok;
 }
 
 std::string format_line_with_cursor(const EditorSession& session, std::size_t line_index) {
@@ -583,19 +507,22 @@ std::string format_line_with_cursor(const EditorSession& session, std::size_t li
     return line.substr(0, col) + "|" + line.substr(col);
 }
 
-void show_note(const EditorSession& session) {
+std::string format_note_for_display(const EditorSession& session) {
+    std::ostringstream out;
     if (session.note.text.empty() && session.current_line == 0) {
-	std::cout << "(empty note — cursor on line 1, column 1)\n";
-	return;
+	out << "(empty note — cursor on line 1, column 1)\n";
+	return out.str();
     }
 
     for (std::size_t i = 0; i < session.note.text.size(); ++i) {
 	const bool here = (i == session.current_line);
-	std::cout << (here ? "> " : "  ") << (i + 1) << ": "
-		  << format_line_with_cursor(session, i) << "\n";
+	out << (here ? "> " : "  ") << (i + 1) << ": "
+	    << format_line_with_cursor(session, i) << "\n";
     }
 
     if (session.current_line == session.note.text.size()) {
-	std::cout << "> " << (session.note.text.size() + 1) << ": |\n";
+	out << "> " << (session.note.text.size() + 1) << ": |\n";
     }
+
+    return out.str();
 }

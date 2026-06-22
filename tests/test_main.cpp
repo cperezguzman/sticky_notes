@@ -2,6 +2,7 @@
 #include "note_store.h"
 #include "parser.h"
 #include "sticky_note.h"
+#include "textbox_input.h"
 
 #include <cassert>
 #include <filesystem>
@@ -77,14 +78,14 @@ void test_newline_and_delete_line() {
     insert_newline_at_cursor(session);
     check(session.note.text.size() == 2, "newline splits or inserts second line");
     check(session.current_line == 1, "cursor on second line");
-    delete_current_line(session);
+    check(delete_current_line(session) == EditStatus::Ok, "delete line succeeds");
     check(session.note.text.size() == 1, "delete line removes one line");
 }
 
 void test_insert_at_cursor() {
     EditorSession session{};
     write_to_current_line(session, "hello");
-    goto_line(session, 1, 3);
+    check(goto_line(session, 1, 3) == EditStatus::Ok, "goto for insert test");
     insert_at_cursor(session, "XX");
     check(session.note.text[0] == "heXXllo", "insert at column");
     check(format_line_with_cursor(session, 0) == "heXX|llo", "cursor marker position");
@@ -93,8 +94,8 @@ void test_insert_at_cursor() {
 void test_erase_before_cursor() {
     EditorSession session{};
     write_to_current_line(session, "hello");
-    goto_line(session, 1, 4);
-    erase_from_current_line(session, {"erase"});
+    check(goto_line(session, 1, 4) == EditStatus::Ok, "goto for erase test");
+    check(erase_char_before(session) == EditStatus::Ok, "erase succeeds");
     check(session.note.text[0] == "helo", "erase deletes char before cursor");
     check(session.current_column == 2, "cursor moves back after erase");
 }
@@ -102,20 +103,20 @@ void test_erase_before_cursor() {
 void test_move_left_right() {
     EditorSession session{};
     write_to_current_line(session, "ab");
-    goto_line(session, 1, 3);
-    move_left(session);
+    check(goto_line(session, 1, 3) == EditStatus::Ok, "goto end of line");
+    check(move_left(session) == EditStatus::Ok, "left within line");
     check(session.current_column == 1, "left within line");
-    move_home(session);
+    check(move_home(session) == EditStatus::Ok, "home");
     check(session.current_column == 0, "home");
-    move_end(session);
+    check(move_end(session) == EditStatus::Ok, "end");
     check(session.current_column == 2, "end");
 }
 
 void test_delete_at_cursor() {
     EditorSession session{};
     write_to_current_line(session, "abc");
-    goto_line(session, 1, 2);
-    delete_at_cursor(session);
+    check(goto_line(session, 1, 2) == EditStatus::Ok, "goto for del test");
+    check(delete_at_cursor(session) == EditStatus::Ok, "del succeeds");
     check(session.note.text[0] == "ac", "del removes char at cursor");
 }
 
@@ -130,7 +131,7 @@ void test_undo_write() {
 void test_find_text() {
     EditorSession session{};
     write_to_current_line(session, "hello world");
-    goto_line(session, 1, 1);
+    check(goto_line(session, 1, 1) == EditStatus::Ok, "goto for find test");
     check(find_text(session, "world"), "find locates needle");
     check(session.note.text[session.current_line].substr(session.current_column, 5) == "world",
 	  "cursor at match");
@@ -139,7 +140,7 @@ void test_find_text() {
 void test_find_wrap_and_findnext() {
     EditorSession session{};
     write_to_current_line(session, "foo world world");
-    move_end(session);
+    check(move_end(session) == EditStatus::Ok, "move to end for find wrap");
     check(find_text(session, "world"), "find wraps from end of line");
     check(session.current_column == 4, "find wraps to first match");
 
@@ -150,8 +151,8 @@ void test_find_wrap_and_findnext() {
 void test_yank_and_paste() {
     EditorSession session{};
     write_to_current_line(session, "copy me");
-    yank_line(session);
-    paste_line(session);
+    check(yank_line(session) == EditStatus::Ok, "yank succeeds");
+    check(paste_line(session) == EditStatus::Ok, "paste succeeds");
     check(session.note.text.size() == 2, "paste adds a line");
     check(session.note.text[1] == "copy me", "pasted line matches yanked line");
 }
@@ -188,6 +189,33 @@ void test_export_note_to_markdown() {
     check(contents.str().find("title: \"Export Me\"") != std::string::npos, "exported content");
     std::filesystem::remove(path);
 }
+
+void test_textbox_init_and_type() {
+    EditorSession session{};
+    textbox_init_session(session);
+    check(session.note.text.size() == 1, "textbox starts with one line");
+    check(session.note.text[0].empty(), "textbox line empty");
+
+    textbox_apply_key(session, {TextboxKeyKind::Character, U'h'});
+    textbox_apply_key(session, {TextboxKeyKind::Character, U'i'});
+    check(textbox_line_text(session) == "hi", "textbox inserts characters");
+    check(textbox_cursor_column(session) == 2, "textbox cursor after insert");
+}
+
+void test_textbox_backspace_and_navigation() {
+    EditorSession session{};
+    textbox_init_session(session);
+    textbox_apply_key(session, {TextboxKeyKind::Character, U'a'});
+    textbox_apply_key(session, {TextboxKeyKind::Character, U'b'});
+    textbox_apply_key(session, {TextboxKeyKind::Character, U'c'});
+    textbox_apply_key(session, {TextboxKeyKind::Left, 0});
+    textbox_apply_key(session, {TextboxKeyKind::Backspace, 0});
+    check(textbox_line_text(session) == "ac", "textbox backspace at cursor");
+    textbox_apply_key(session, {TextboxKeyKind::Home, 0});
+    check(textbox_cursor_column(session) == 0, "textbox home");
+    textbox_apply_key(session, {TextboxKeyKind::End, 0});
+    check(textbox_cursor_column(session) == 2, "textbox end");
+}
 } // namespace
 
 int main() {
@@ -208,6 +236,8 @@ int main() {
     test_yank_and_paste();
     test_format_note_as_markdown();
     test_export_note_to_markdown();
+    test_textbox_init_and_type();
+    test_textbox_backspace_and_navigation();
 
     if (failures == 0) {
 	std::cout << "All tests passed.\n";

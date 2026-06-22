@@ -1,4 +1,5 @@
 #include "note_editor.h"
+#include "note_editor_cli.h"
 #include "note_store.h"
 #include "parser.h"
 
@@ -210,19 +211,19 @@ int main() {
 	}
 
 	else if (fields[0] == "erase") {
-	    erase_from_current_line(session, fields);
+	    cli_erase(session, fields);
 	}
 
 	else if (fields[0] == "del") {
-	    delete_at_cursor(session);
+	    cli_delete_at_cursor(session);
 	}
 
 	else if (fields[0] == "undo") {
-	    editor_undo(session);
+	    cli_undo(session);
 	}
 
 	else if (fields[0] == "redo") {
-	    editor_redo(session);
+	    cli_redo(session);
 	}
 
 	else if (fields[0] == "find") {
@@ -230,39 +231,39 @@ int main() {
 		std::cout << "Error: find needs text (find <text>).\n";
 		continue;
 	    }
-	    find_text(session, fields[1]);
+	    cli_find(session, fields[1]);
 	}
 
 	else if (fields[0] == "findnext") {
-	    find_next(session);
+	    cli_find_next(session);
 	}
 
 	else if (fields[0] == "yank") {
-	    yank_line(session);
+	    cli_yank(session);
 	}
 
 	else if (fields[0] == "paste") {
-	    paste_line(session);
+	    cli_paste(session);
 	}
 
 	else if (fields[0] == "pos") {
-	    show_cursor_position(session);
+	    cli_show_cursor(session);
 	}
 
 	else if (fields[0] == "left") {
-	    move_left(session);
+	    cli_move_left(session);
 	}
 
 	else if (fields[0] == "right") {
-	    move_right(session);
+	    cli_move_right(session);
 	}
 
 	else if (fields[0] == "home") {
-	    move_home(session);
+	    cli_move_home(session);
 	}
 
 	else if (fields[0] == "end") {
-	    move_end(session);
+	    cli_move_end(session);
 	}
 
 	else if (fields[0] == "goto") {
@@ -281,15 +282,15 @@ int main() {
 		std::cout << "Error: Invalid line or column number.\n";
 		continue;
 	    }
-	    goto_line(session, line, col);
+	    cli_goto(session, line, col);
 	}
 
 	else if (fields[0] == "show") {
-	    show_note(session);
+	    cli_show_note(session);
 	}
 
 	else if (fields[0] == "newline") {
-	    insert_newline_at_cursor(session);
+	    cli_newline(session);
 	}
 
 	else if (fields[0] == "save") {
@@ -357,7 +358,7 @@ int main() {
 
 	else if (fields[0] == "delete") {
 	    if (fields.size() >= 2 && fields[1] == "line") {
-		delete_current_line(session);
+		cli_delete_line(session);
 		continue;
 	    }
 

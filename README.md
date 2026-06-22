@@ -17,7 +17,8 @@ Produces `sticky_notes` in the project directory. Alternatively:
 
 ```bash
 g++ -std=c++20 -Wall -Wextra -o sticky_notes \
-  src/main.cpp src/parser.cpp src/sticky_note.cpp src/note_store.cpp src/note_editor.cpp
+  src/main.cpp src/parser.cpp src/sticky_note.cpp src/note_store.cpp \
+  src/note_editor.cpp src/note_editor_cli.cpp
 ```
 
 ## Run
@@ -85,11 +86,18 @@ Opening a note **reloads** title, id, body, and parses **Created** / **Last Edit
 
 ```
 src/
-  main.cpp           — CLI loop and command dispatch
-  note_editor.cpp/.h — line and column cursor; insert, move, erase at cursor
-  note_store.cpp/.h  — load/save, list, open/view by title or id
+  main.cpp              — CLI loop and command dispatch
+  note_editor.cpp/.h    — silent edit core (`EditStatus`, typed erase API)
+  note_editor_cli.cpp/.h — terminal presentation adapter
+  note_store.cpp/.h     — load/save, list, open/view by title or id
   parser.cpp/.h      — command parsing; note file parsing
   sticky_note.cpp/.h — `sticky_note` struct; timestamps
+  textbox_input.*    — platform-neutral single-line key seam (Phase 2)
+  textbox_sdl.*      — SDL3 adapter + render (Phase 2)
+sandbox/
+  textbox_main.cpp   — Phase 2 SDL3 window loop
+scripts/
+  build-sdl3.sh      — vendored SDL3 install (local, gitignored)
 tests/
   test_main.cpp      — parser and timestamp tests
   fixtures/          — sample note files for tests
@@ -112,6 +120,25 @@ Automated README manual checklist:
 ```bash
 make smoke
 ```
+
+## Phase 2 — SDL3 textbox sandbox
+
+Single-line GUI textbox using **SDL3** and the same `EditorSession` / editor core as the CLI — no toolkit text widget.
+
+**One-time:** build SDL3 into `third_party/` (gitignored):
+
+```bash
+./scripts/build-sdl3.sh
+```
+
+**Run the sandbox:**
+
+```bash
+make textbox
+./textbox_sandbox
+```
+
+Type to insert; **Backspace** / **Delete**; arrow keys; **Home** / **End**; **Esc** to quit (or close the window). Rendering uses SDL’s debug bitmap font (`SDL_RenderDebugText`); input goes through `textbox_apply_key` → `insert_at_cursor` / `move_left` / etc.
 
 ## Manual test checklist
 
