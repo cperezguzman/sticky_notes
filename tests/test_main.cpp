@@ -2,8 +2,13 @@
 #include "note_file_codec.h"
 #include "note_store.h"
 #include "parser.h"
+#include "sticky_gui.h"
 #include "sticky_note.h"
 #include "textbox_input.h"
+#include "textbox_sdl.h"
+
+#include "sdl_event_helpers.h"
+#include "test_notes_dir.h"
 
 #include <cassert>
 #include <filesystem>
@@ -272,6 +277,128 @@ void test_move_up_down() {
     check(move_down(session) == EditStatus::Ok, "move down ok");
     check(session.current_line == 1, "on second line");
 }
+
+void test_delete_note_file() {
+    test_notes::TempNotesDir dir;
+    test_notes::write_note_file(40, "Delete", "x\n");
+    check(std::filesystem::exists("notes/note_40.txt"), "delete fixture exists");
+    check(delete_note_file("notes/note_40.txt"), "delete_note_file ok");
+    check(!std::filesystem::exists("notes/note_40.txt"), "delete_note_file removes file");
+    check(!delete_note_file(""), "delete_note_file rejects empty path");
+}
+
+void test_sticky_gui_focus_raises_z_order() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(0, "First", "a"), 40.0f, 40.0f);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(1, "Second", "b"), 80.0f, 80.0f);
+
+    bool quit = false;
+    sticky_gui_handle_event(gui, sdl_test::mouse_button_down(50.0f, 50.0f), quit);
+    sticky_gui_handle_event(gui, sdl_test::mouse_button_up(50.0f, 50.0f), quit);
+
+    check(sticky_gui_focused_note(gui).title == "First", "click raises back panel to focus");
+    check(sticky_gui_focused_index(gui) == sticky_gui_panel_count(gui) - 1,
+	  "focused panel is top of z-order");
+}
+
+void test_sticky_gui_delete_confirm_y_no_resave() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(41, "Gone", "z"), 40.0f, 40.0f);
+
+    bool quit = false;
+    sticky_gui_handle_event(gui, sdl_test::ctrl_shift(SDL_SCANCODE_W), quit);
+    sticky_gui_handle_event(gui, sdl_test::key_down(SDL_SCANCODE_Y), quit);
+
+    check(sticky_gui_panel_count(gui) == 0, "delete y closes panel");
+    check(!std::filesystem::exists("notes/note_41.txt"), "delete y does not re-save file (BUG-005)");
+}
+
+void test_sticky_gui_panel_hit_targets() {
+    StickyPanel panel{};
+    panel.x = 100.0f;
+    panel.y = 50.0f;
+    panel.width = 280.0f;
+    panel.height = 200.0f;
+
+    StickyPanelHitTargets hit{};
+    sticky_gui_panel_hit_targets(panel, hit);
+
+    check(hit.title_x > panel.x && hit.title_x < panel.x + panel.width, "title hit inside panel width");
+    check(hit.title_y >= panel.y && hit.title_y <= panel.y + sticky_panel_title_bar_height(),
+	  "title hit inside title bar");
+    check(hit.grip_x > panel.x + panel.width - 15.0f, "grip hit near bottom-right");
+    check(hit.close_x > panel.x + panel.width - sticky_panel_close_button_width() - 16.0f,
+	  "close hit near top-right");
+}
+
+void test_sticky_gui_title_edit_commit() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(42, "Before", ""), 40.0f, 40.0f);
+
+    bool quit = false;
+    sticky_gui_handle_event(gui, sdl_test::key_down(SDL_SCANCODE_F2), quit);
+    check(gui.editing_title, "f2 starts title edit");
+    sticky_gui_handle_event(gui, sdl_test::text_input("After"), quit);
+    sticky_gui_handle_event(gui, sdl_test::key_down(SDL_SCANCODE_RETURN), quit);
+
+    check(sticky_gui_focused_note(gui).title == "BeforeAfter", "title edit appends then commits");
+}
+
+void test_sticky_gui_help_and_delete_modal() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(43, "Modal", ""), 40.0f, 40.0f);
+
+    bool quit = false;
+    sticky_gui_handle_event(gui, sdl_test::key_down(SDL_SCANCODE_H), quit);
+    check(gui.show_help, "help opens");
+    sticky_gui_handle_event(gui, sdl_test::text_input("nope"), quit);
+    check(sticky_gui_focused_note(gui).text[0].empty(), "help blocks typing");
+
+    sticky_gui_handle_event(gui, sdl_test::key_down(SDL_SCANCODE_H), quit);
+    sticky_gui_handle_event(gui, sdl_test::ctrl_shift(SDL_SCANCODE_W), quit);
+    check(gui.pending_delete, "delete confirm opens");
+    sticky_gui_handle_event(gui, sdl_test::text_input("nope"), quit);
+    check(std::filesystem::exists("notes/note_43.txt"), "delete confirm blocks stray keys");
+}
+
+void test_textbox_sdl_text_and_arrows() {
+    EditorSession session{};
+    textbox_init_session(session);
+    bool quit = false;
+
+    textbox_handle_sdl_event(session, sdl_test::text_input("abc"), quit);
+    check(textbox_line_text(session) == "abc", "sdl text input inserts");
+
+    textbox_handle_sdl_event(session, sdl_test::key_down(SDL_SCANCODE_LEFT), quit);
+    textbox_handle_sdl_event(session, sdl_test::key_down(SDL_SCANCODE_LEFT), quit);
+    check(textbox_cursor_column(session) == 1, "sdl left moves cursor");
+
+    textbox_handle_sdl_event(session, sdl_test::key_down(SDL_SCANCODE_RETURN), quit);
+    check(textbox_line_count(session) == 2, "sdl enter splits line");
+}
+
+void test_textbox_sdl_delete_key() {
+    EditorSession session{};
+    textbox_init_session(session);
+    bool quit = false;
+    textbox_handle_sdl_event(session, sdl_test::text_input("ab"), quit);
+    textbox_handle_sdl_event(session, sdl_test::key_down(SDL_SCANCODE_HOME), quit);
+    textbox_handle_sdl_event(session, sdl_test::key_down(SDL_SCANCODE_DELETE), quit);
+    check(textbox_line_text(session) == "b", "sdl delete removes at cursor");
+}
+
+void test_sticky_panel_chrome_sizes() {
+    check(sticky_panel_title_bar_height() > 0.0f, "title bar height positive");
+    check(sticky_panel_close_button_width() > 0.0f, "close button width positive");
+}
 } // namespace
 
 int main() {
@@ -298,6 +425,15 @@ int main() {
     test_textbox_multiline_newline_and_arrows();
     test_textbox_join_lines_on_backspace();
     test_move_up_down();
+    test_delete_note_file();
+    test_sticky_gui_focus_raises_z_order();
+    test_sticky_gui_delete_confirm_y_no_resave();
+    test_sticky_gui_panel_hit_targets();
+    test_sticky_gui_title_edit_commit();
+    test_sticky_gui_help_and_delete_modal();
+    test_textbox_sdl_text_and_arrows();
+    test_textbox_sdl_delete_key();
+    test_sticky_panel_chrome_sizes();
 
     if (failures == 0) {
 	std::cout << "All tests passed.\n";

@@ -43,3 +43,27 @@ void sticky_gui_save_all(const StickyGui& gui);
 void sticky_gui_render(SDL_Renderer* renderer, StickyGui& gui);
 
 bool sticky_gui_handle_event(StickyGui& gui, const SDL_Event& event, bool& quit_requested);
+
+// Test / harness helpers (no SDL init required for event simulation).
+void sticky_gui_reset(StickyGui& gui);
+
+void sticky_gui_add_panel_from_note(StickyGui& gui, const sticky_note& note, float x, float y);
+
+std::size_t sticky_gui_panel_count(const StickyGui& gui);
+
+std::size_t sticky_gui_focused_index(const StickyGui& gui);
+
+const sticky_note& sticky_gui_focused_note(const StickyGui& gui);
+
+const StickyPanel& sticky_gui_panel_at(const StickyGui& gui, std::size_t index);
+
+struct StickyPanelHitTargets {
+    float close_x = 0.0f;
+    float close_y = 0.0f;
+    float title_x = 0.0f;
+    float title_y = 0.0f;
+    float grip_x = 0.0f;
+    float grip_y = 0.0f;
+};
+
+void sticky_gui_panel_hit_targets(const StickyPanel& panel, StickyPanelHitTargets& out);

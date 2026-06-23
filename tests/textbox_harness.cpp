@@ -1,0 +1,497 @@
+// Deep integration harness for Phase 4 sticky GUI — simulates SDL events without a window.
+// Run via: ./tests/textbox_smoke.sh  or  make textbox-smoke
+
+#include "note_store.h"
+#include "sticky_gui.h"
+#include "textbox_input.h"
+#include "textbox_sdl.h"
+
+#include "sdl_event_helpers.h"
+#include "test_notes_dir.h"
+
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <string>
+
+namespace {
+int failures = 0;
+int passes = 0;
+
+void pass(const char* label) {
+    std::cout << "PASS: " << label << '\n';
+    ++passes;
+}
+
+void fail(const char* label) {
+    std::cerr << "FAIL: " << label << '\n';
+    ++failures;
+}
+
+void check(bool ok, const char* label) {
+    if (ok) {
+	pass(label);
+    } else {
+	fail(label);
+    }
+}
+
+void gui_event(StickyGui& gui, const SDL_Event& event, bool& quit) {
+    sticky_gui_handle_event(gui, event, quit);
+}
+
+void gui_type(StickyGui& gui, const char* text, bool& quit) {
+    gui_event(gui, sdl_test::text_input(text), quit);
+}
+
+void sdl_event(EditorSession& session, const SDL_Event& event, bool& quit) {
+    textbox_handle_sdl_event(session, event, quit);
+}
+
+void sdl_type(EditorSession& session, const char* text, bool& quit) {
+    sdl_event(session, sdl_test::text_input(text), quit);
+}
+
+sticky_note note_from_file(const std::string& path) {
+    sticky_note note{};
+    load_note_from_path(note, path);
+    return note;
+}
+
+std::string body_first_line(const std::string& path) {
+    const sticky_note note = note_from_file(path);
+    if (note.text.empty()) {
+	return "";
+    }
+    return note.text[0];
+}
+
+void clear_title_buffer(StickyGui& gui, bool& quit) {
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_END), quit);
+    while (!gui.title_edit_buffer.empty()) {
+	gui_event(gui, sdl_test::key_down(SDL_SCANCODE_BACKSPACE), quit);
+    }
+}
+
+void scenario_init_loads_notes_from_disk() {
+    test_notes::TempNotesDir dir;
+    test_notes::write_note_file(0, "Alpha", "alpha body\n");
+    test_notes::write_note_file(1, "Beta", "beta body\n");
+
+    StickyGui gui{};
+    sticky_gui_init(gui);
+
+    check(sticky_gui_panel_count(gui) == 2, "init loads two note panels");
+    check(sticky_gui_focused_note(gui).title == "Beta", "init focuses last loaded panel");
+}
+
+void scenario_init_blank_when_no_notes() {
+    test_notes::TempNotesDir dir;
+
+    StickyGui gui{};
+    sticky_gui_init(gui);
+
+    check(sticky_gui_panel_count(gui) == 1, "init creates blank panel when notes empty");
+    check(sticky_gui_focused_note(gui).title.empty(), "blank panel has empty title");
+}
+
+void scenario_init_caps_at_eight_notes() {
+    test_notes::TempNotesDir dir;
+    for (int i = 0; i < 10; ++i) {
+	test_notes::write_note_file(i, "N" + std::to_string(i), "body\n");
+    }
+
+    StickyGui gui{};
+    sticky_gui_init(gui);
+    check(sticky_gui_panel_count(gui) == 8, "init loads at most eight panels");
+}
+
+void scenario_focus_panel_by_click() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(0, "Back", "a"), 40.0f, 40.0f);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(1, "Front", "b"), 200.0f, 200.0f);
+
+    bool quit = false;
+    gui_event(gui, sdl_test::mouse_button_down(60.0f, 60.0f), quit);
+    gui_event(gui, sdl_test::mouse_button_up(60.0f, 60.0f), quit);
+
+    check(sticky_gui_focused_note(gui).title == "Back", "click back panel focuses it");
+    check(!quit, "focus click does not quit");
+}
+
+void scenario_body_typing_and_save() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(5, "Typed", ""), 40.0f, 40.0f);
+
+    bool quit = false;
+    gui_type(gui, "hello", quit);
+    gui_event(gui, sdl_test::ctrl(SDL_SCANCODE_S), quit);
+
+    check(body_first_line("notes/note_5.txt") == "hello", "ctrl+s persists typed body");
+}
+
+void scenario_multiline_body_via_enter() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(6, "Lines", ""), 40.0f, 40.0f);
+
+    bool quit = false;
+    gui_type(gui, "a", quit);
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_RETURN), quit);
+    gui_type(gui, "b", quit);
+    gui_event(gui, sdl_test::ctrl(SDL_SCANCODE_S), quit);
+
+    const sticky_note saved = note_from_file("notes/note_6.txt");
+    check(saved.text.size() == 2, "enter creates second line in saved note");
+    check(saved.text[0] == "a" && saved.text[1] == "b", "multiline body saved correctly");
+}
+
+void scenario_close_panel_saves_then_removes() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(7, "Close Me", ""), 40.0f, 40.0f);
+
+    bool quit = false;
+    gui_type(gui, "new", quit);
+    gui_event(gui, sdl_test::ctrl(SDL_SCANCODE_W), quit);
+
+    check(sticky_gui_panel_count(gui) == 0, "ctrl+w removes panel from desk");
+    check(std::filesystem::exists("notes/note_7.txt"), "ctrl+w keeps note file on disk");
+    check(body_first_line("notes/note_7.txt") == "new", "ctrl+w saves body before close");
+}
+
+void scenario_delete_from_disk_y_removes_file() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(8, "Trash", "bye"), 40.0f, 40.0f);
+
+    bool quit = false;
+    gui_event(gui, sdl_test::ctrl_shift(SDL_SCANCODE_W), quit);
+    check(gui.pending_delete, "ctrl+shift+w opens delete confirm");
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_Y), quit);
+
+    check(sticky_gui_panel_count(gui) == 0, "delete confirm y removes panel");
+    check(!std::filesystem::exists("notes/note_8.txt"), "delete confirm y removes file from disk");
+}
+
+void scenario_delete_from_disk_n_keeps_file() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(9, "Keep", "stay"), 40.0f, 40.0f);
+
+    bool quit = false;
+    gui_event(gui, sdl_test::ctrl_shift(SDL_SCANCODE_W), quit);
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_N), quit);
+
+    check(sticky_gui_panel_count(gui) == 1, "delete confirm n keeps panel");
+    check(std::filesystem::exists("notes/note_9.txt"), "delete confirm n keeps file");
+    check(!gui.pending_delete, "delete confirm n clears pending state");
+}
+
+void scenario_delete_cancel_esc() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(10, "Esc", "x"), 40.0f, 40.0f);
+
+    bool quit = false;
+    gui_event(gui, sdl_test::ctrl_shift(SDL_SCANCODE_W), quit);
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_ESCAPE), quit);
+
+    check(sticky_gui_panel_count(gui) == 1, "esc cancels delete and keeps panel");
+    check(std::filesystem::exists("notes/note_10.txt"), "esc cancel keeps file");
+}
+
+void scenario_delete_does_not_resurrect_file_on_reinit() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(11, "Gone", "z"), 40.0f, 40.0f);
+
+    bool quit = false;
+    gui_event(gui, sdl_test::ctrl_shift(SDL_SCANCODE_W), quit);
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_Y), quit);
+
+    StickyGui reloaded{};
+    sticky_gui_init(reloaded);
+    check(!std::filesystem::exists("notes/note_11.txt"), "file stays deleted after re-init");
+    check(sticky_gui_panel_count(reloaded) == 1, "re-init shows blank desk when no notes remain");
+}
+
+void scenario_title_rename_f2() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(12, "Old Name", "body"), 40.0f, 40.0f);
+
+    bool quit = false;
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_F2), quit);
+    check(gui.editing_title, "f2 enters title edit mode");
+
+    clear_title_buffer(gui, quit);
+    gui_type(gui, "Renamed", quit);
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_RETURN), quit);
+
+    check(!gui.editing_title, "enter commits title edit");
+    check(sticky_gui_focused_note(gui).title == "Renamed", "title updated in session");
+    check(note_from_file("notes/note_12.txt").title == "Renamed", "title persisted to disk");
+}
+
+void scenario_title_edit_escape_cancels() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(13, "Stable", ""), 40.0f, 40.0f);
+
+    bool quit = false;
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_F2), quit);
+    gui_type(gui, "XXX", quit);
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_ESCAPE), quit);
+
+    check(sticky_gui_focused_note(gui).title == "Stable", "esc cancels title edit");
+}
+
+void scenario_help_overlay_blocks_body_input() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(14, "Help", ""), 40.0f, 40.0f);
+
+    bool quit = false;
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_H), quit);
+    check(gui.show_help, "h toggles help overlay on");
+    gui_type(gui, "blocked", quit);
+    check(sticky_gui_focused_note(gui).text[0].empty(), "help overlay blocks body typing");
+
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_H), quit);
+    check(!gui.show_help, "h toggles help overlay off");
+}
+
+void scenario_ctrl_n_creates_note_file() {
+    test_notes::TempNotesDir dir;
+    std::ofstream("notes/next_note_id.txt") << "20";
+
+    StickyGui gui{};
+    sticky_gui_init(gui);
+
+    bool quit = false;
+    gui_event(gui, sdl_test::ctrl(SDL_SCANCODE_N), quit);
+    gui_type(gui, "fresh", quit);
+    gui_event(gui, sdl_test::ctrl(SDL_SCANCODE_S), quit);
+
+    check(sticky_gui_panel_count(gui) == 2, "ctrl+n adds panel to desk");
+    check(std::filesystem::exists("notes/note_20.txt"), "ctrl+n creates note file on save");
+    check(body_first_line("notes/note_20.txt") == "fresh", "new note body saved");
+}
+
+void scenario_max_eight_panels() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    for (int i = 0; i < 8; ++i) {
+	sticky_gui_add_panel_from_note(
+	    gui, test_notes::make_note_on_disk(100 + i, "P" + std::to_string(i), ""), 40.0f + i, 40.0f + i);
+    }
+
+    bool quit = false;
+    gui_event(gui, sdl_test::ctrl(SDL_SCANCODE_N), quit);
+    check(sticky_gui_panel_count(gui) == 8, "ninth ctrl+n does not exceed max panels");
+}
+
+void scenario_drag_title_bar_moves_panel() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(15, "Drag", ""), 100.0f, 100.0f);
+
+    StickyPanelHitTargets hit{};
+    sticky_gui_panel_hit_targets(sticky_gui_panel_at(gui, 0), hit);
+    const float start_x = sticky_gui_panel_at(gui, 0).x;
+    const float start_y = sticky_gui_panel_at(gui, 0).y;
+    const float drag_off_x = hit.title_x - start_x;
+    const float drag_off_y = hit.title_y - start_y;
+    const float target_x = start_x + 80.0f;
+    const float target_y = start_y + 60.0f;
+
+    bool quit = false;
+    gui_event(gui, sdl_test::mouse_button_down(hit.title_x, hit.title_y), quit);
+    gui_event(gui, sdl_test::mouse_motion(target_x + drag_off_x, target_y + drag_off_y), quit);
+    gui_event(gui, sdl_test::mouse_button_up(target_x + drag_off_x, target_y + drag_off_y), quit);
+
+    const StickyPanel& panel = sticky_gui_panel_at(gui, sticky_gui_focused_index(gui));
+    check(panel.x == target_x && panel.y == target_y, "drag title bar moves panel");
+}
+
+void scenario_resize_grip_expands_panel() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(16, "Resize", ""), 50.0f, 50.0f);
+
+    const float start_w = sticky_gui_panel_at(gui, 0).width;
+    StickyPanelHitTargets hit{};
+    sticky_gui_panel_hit_targets(sticky_gui_panel_at(gui, 0), hit);
+
+    bool quit = false;
+    gui_event(gui, sdl_test::mouse_button_down(hit.grip_x, hit.grip_y), quit);
+    gui_event(gui, sdl_test::mouse_motion(hit.grip_x + 40.0f, hit.grip_y + 30.0f), quit);
+    gui_event(gui, sdl_test::mouse_button_up(hit.grip_x + 40.0f, hit.grip_y + 30.0f), quit);
+
+    check(sticky_gui_panel_at(gui, 0).width > start_w, "resize grip increases panel width");
+}
+
+void scenario_close_button_saves_and_removes() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(17, "X Close", ""), 80.0f, 80.0f);
+
+    StickyPanelHitTargets hit{};
+    sticky_gui_panel_hit_targets(sticky_gui_panel_at(gui, 0), hit);
+
+    bool quit = false;
+    gui_type(gui, "saved", quit);
+    gui_event(gui, sdl_test::mouse_button_down(hit.close_x, hit.close_y), quit);
+
+    check(sticky_gui_panel_count(gui) == 0, "close button removes panel");
+    check(body_first_line("notes/note_17.txt") == "saved", "close button saves before remove");
+}
+
+void scenario_save_all_on_quit_path() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(18, "Quit Save", ""), 40.0f, 40.0f);
+
+    bool quit = false;
+    gui_type(gui, "persist", quit);
+    sticky_gui_save_all(gui);
+
+    check(body_first_line("notes/note_18.txt") == "persist", "save_all writes focused body");
+}
+
+void scenario_esc_requests_quit() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(19, "Quit", ""), 40.0f, 40.0f);
+
+    bool quit = false;
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_ESCAPE), quit);
+    check(quit, "esc sets quit requested on focused body");
+}
+
+void scenario_textbox_sdl_esc_quit() {
+    EditorSession session{};
+    textbox_init_session(session);
+    bool quit = false;
+    sdl_event(session, sdl_test::key_down(SDL_SCANCODE_ESCAPE), quit);
+    check(quit, "textbox_handle_sdl_event esc quits");
+}
+
+void scenario_backspace_merge_via_sdl() {
+    EditorSession session{};
+    textbox_init_session(session);
+    bool quit = false;
+    sdl_type(session, "hi", quit);
+    sdl_event(session, sdl_test::key_down(SDL_SCANCODE_RETURN), quit);
+    sdl_type(session, "!", quit);
+    sdl_event(session, sdl_test::key_down(SDL_SCANCODE_HOME), quit);
+    sdl_event(session, sdl_test::key_down(SDL_SCANCODE_BACKSPACE), quit);
+
+    check(textbox_line_count(session) == 1, "sdl backspace at line start merges");
+    check(textbox_line_text(session) == "hi!", "sdl merge preserves text");
+}
+
+void scenario_delete_note_file_helper() {
+    test_notes::TempNotesDir dir;
+    test_notes::write_note_file(30, "Delete API", "x\n");
+    check(std::filesystem::exists("notes/note_30.txt"), "fixture exists before delete");
+    check(delete_note_file("notes/note_30.txt"), "delete_note_file succeeds");
+    check(!std::filesystem::exists("notes/note_30.txt"), "delete_note_file removes path");
+    check(!delete_note_file(""), "delete_note_file rejects empty path");
+}
+
+void scenario_title_whitespace_trims_to_untitled() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(31, "Has Title", ""), 40.0f, 40.0f);
+
+    bool quit = false;
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_F2), quit);
+    clear_title_buffer(gui, quit);
+    gui_type(gui, "   ", quit);
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_RETURN), quit);
+
+    check(sticky_gui_focused_note(gui).title == "Untitled", "whitespace-only title becomes Untitled");
+}
+
+void scenario_f1_toggles_help() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(32, "F1", ""), 40.0f, 40.0f);
+
+    bool quit = false;
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_F1), quit);
+    check(gui.show_help, "f1 toggles help overlay");
+}
+
+void scenario_title_edit_blocks_body_keys() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(33, "Title Mode", ""), 40.0f, 40.0f);
+
+    bool quit = false;
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_F2), quit);
+    gui_type(gui, "Z", quit);
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_RETURN), quit);
+
+    check(sticky_gui_focused_note(gui).text[0].empty(), "title edit does not insert into body");
+    check(sticky_gui_focused_note(gui).title == "Title ModeZ", "title edit appends to title buffer");
+}
+
+} // namespace
+
+int main() {
+    scenario_init_loads_notes_from_disk();
+    scenario_init_blank_when_no_notes();
+    scenario_init_caps_at_eight_notes();
+    scenario_focus_panel_by_click();
+    scenario_body_typing_and_save();
+    scenario_multiline_body_via_enter();
+    scenario_close_panel_saves_then_removes();
+    scenario_delete_from_disk_y_removes_file();
+    scenario_delete_from_disk_n_keeps_file();
+    scenario_delete_cancel_esc();
+    scenario_delete_does_not_resurrect_file_on_reinit();
+    scenario_title_rename_f2();
+    scenario_title_edit_escape_cancels();
+    scenario_help_overlay_blocks_body_input();
+    scenario_ctrl_n_creates_note_file();
+    scenario_max_eight_panels();
+    scenario_drag_title_bar_moves_panel();
+    scenario_resize_grip_expands_panel();
+    scenario_close_button_saves_and_removes();
+    scenario_save_all_on_quit_path();
+    scenario_esc_requests_quit();
+    scenario_textbox_sdl_esc_quit();
+    scenario_backspace_merge_via_sdl();
+    scenario_delete_note_file_helper();
+    scenario_title_whitespace_trims_to_untitled();
+    scenario_f1_toggles_help();
+    scenario_title_edit_blocks_body_keys();
+
+    std::cout << "\nResults: " << passes << " passed, " << failures << " failed\n";
+    return failures == 0 ? 0 : 1;
+}

@@ -525,3 +525,42 @@ bool sticky_gui_handle_event(StickyGui& gui, const SDL_Event& event, bool& quit_
 
     return textbox_handle_sdl_event(gui.panels[gui.focused].session, event, quit_requested);
 }
+
+void sticky_gui_reset(StickyGui& gui) {
+    gui = StickyGui{};
+}
+
+void sticky_gui_add_panel_from_note(StickyGui& gui, const sticky_note& note, float x, float y) {
+    add_panel(gui, make_panel_from_note(note, x, y));
+}
+
+std::size_t sticky_gui_panel_count(const StickyGui& gui) {
+    return gui.panels.size();
+}
+
+std::size_t sticky_gui_focused_index(const StickyGui& gui) {
+    return gui.focused;
+}
+
+const sticky_note& sticky_gui_focused_note(const StickyGui& gui) {
+    return gui.panels.at(gui.focused).session.note;
+}
+
+const StickyPanel& sticky_gui_panel_at(const StickyGui& gui, std::size_t index) {
+    return gui.panels.at(index);
+}
+
+void sticky_gui_panel_hit_targets(const StickyPanel& panel, StickyPanelHitTargets& out) {
+    float close_w = 0.0f;
+    float close_h = 0.0f;
+    close_button_rect(panel, out.close_x, out.close_y, close_w, close_h);
+    out.close_x += close_w * 0.5f;
+    out.close_y += close_h * 0.5f;
+
+    const float title_h = sticky_panel_title_bar_height();
+    out.title_x = panel.x + panel.width * 0.5f;
+    out.title_y = panel.y + title_h * 0.5f;
+
+    out.grip_x = panel.x + panel.width - kResizeGrip * 0.5f;
+    out.grip_y = panel.y + panel.height - kResizeGrip * 0.5f;
+}

@@ -101,27 +101,76 @@ sandbox/
 scripts/
   build-sdl3.sh      — vendored SDL3 install (local, gitignored)
 tests/
-  test_main.cpp      — parser and timestamp tests
-  fixtures/          — sample note files for tests
+  test_main.cpp         — unit tests (CLI, editor, codec, GUI logic)
+  textbox_harness.cpp   — Phase 4 integration harness (52 headless scenarios)
+  textbox_smoke.sh      — runs harness; mirrors manual_smoke.sh for GUI
+  sdl_event_helpers.h   — synthetic SDL key/mouse events for tests
+  test_notes_dir.h      — isolated temp notes/ per test scenario
+  fixtures/             — sample note files for parser/codec tests
 notes/               — local data (gitignored; auto-created on first run)
 Makefile
 ```
 
+Build targets: `sticky_notes` (CLI), `test_runner`, `textbox_test_harness`, `textbox_sandbox` (GUI).
+
 ## Tests
 
-From the project root:
+All test commands run from the project root. **GUI tests do not open a window** — they simulate SDL events in process.
+
+**One-time:** SDL3 must be built for GUI-linked tests (`make test`, `make textbox-smoke`):
 
 ```bash
-make test
+./scripts/build-sdl3.sh
 ```
 
-Runs parser and timestamp parsing checks against `tests/fixtures/`.
+### Unit tests — `make test`
 
-Automated README manual checklist:
+Builds `test_runner` and runs **38 assertions** covering:
+
+| Area | What is checked |
+|------|-----------------|
+| **Parser / codec** | `parse_command`, `parse_note_file` (fixture + malformed) |
+| **Timestamps** | `parse_saved_timestamp_line` round-trip and rejection |
+| **Editor core** | insert, erase, movement, undo, find wrap, yank/paste, lines |
+| **textbox_input** | init, typing, backspace, multiline Enter, line merge, Up/Down |
+| **note_store** | `delete_note_file` |
+| **sticky_gui** | focus z-order, delete confirm (no re-save after Y), hit targets, F2 title edit, help/delete modals block body input |
+| **textbox_sdl** | text input, arrows, Enter, Delete, Esc quit, panel chrome sizes |
+
+Uses `tests/test_notes_dir.h` so each GUI-related test gets its own temporary `notes/` directory.
+
+### CLI smoke — `make smoke`
+
+Runs `tests/manual_smoke.sh` — **30 automated checks** that pipe commands into `./sticky_notes` and assert stdout + disk state. Covers the full **Manual test checklist (CLI)** below. Backs up and restores your real `notes/` after the run.
+
+### GUI smoke — `make textbox-smoke`
+
+Builds `textbox_test_harness` and runs `tests/textbox_smoke.sh` — **52 headless scenarios** that drive `sticky_gui_handle_event()` with synthetic SDL keyboard and mouse events. Covers the **Manual test checklist (GUI)** below (except visual polish). Each scenario uses an isolated temp `notes/` directory.
+
+| Scenario group | Examples |
+|----------------|----------|
+| **Startup** | Load notes from disk, blank desk when empty, cap at 8 panels |
+| **Focus** | Click panel raises z-order |
+| **Body edit** | Type, Enter multiline, Ctrl+S save to disk |
+| **Close** | Ctrl+W saves then removes panel; title-bar **x** same |
+| **Delete file** | Ctrl+Shift+W → Y removes file (no resurrection on re-init); N/Esc cancel |
+| **Title** | F2 rename + persist; Esc cancel; whitespace → `Untitled` |
+| **Modals** | H/F1 help blocks typing; delete confirm blocks stray keys |
+| **Create** | Ctrl+N + save creates `notes/note_<id>.txt` |
+| **Mouse** | Drag title bar, resize grip |
+| **Quit path** | `sticky_gui_save_all`, Esc sets quit |
+| **SDL seam** | `textbox_handle_sdl_event` Enter, Delete, backspace merge |
+
+**Regression:** includes automated coverage for **BUG-005** (delete-from-disk must not re-save via `close_panel_at`).
+
+### Interactive GUI — manual only
 
 ```bash
-make smoke
+make textbox
+./textbox_sandbox
 ```
+
+Requires a display. Not run by `make smoke` or `make textbox-smoke`.
 
 ## Phase 2 — SDL3 textbox sandbox
 
@@ -177,6 +226,8 @@ make textbox
 
 ## Manual test checklist (CLI)
 
+Automated by `make smoke` (30 checks). Backs up and restores your `notes/` directory.
+
 - [ ] First run with `next_note_id.txt` = `0` creates a note and prompts for title.
 - [ ] `write hello` then `show` — line 1 shows `hello|` (cursor at end).
 - [ ] `goto 1 3` then `insert XX` — yields `heXXllo` on line 1.
@@ -196,6 +247,8 @@ make textbox
 
 ## Manual test checklist (GUI)
 
+Automated by `make textbox-smoke` (52 headless checks). Run `./textbox_sandbox` on your display for visual verification.
+
 - [ ] Startup loads notes from `notes/` (up to 8 panels).
 - [ ] Click panel focuses it; drag title bar moves; grip resizes.
 - [ ] Type, Enter, arrows, Backspace merge — same as Phase 3 in focused body.
@@ -206,7 +259,9 @@ make textbox
 
 ## Limitations
 
-- One **active** note at a time; switching uses `open` / `create`.
+- **CLI:** one active note at a time; switching uses `open` / `create`.
 - **Titles** for `open` / `view` must match **exactly** when not using a numeric id.
 - Opening by id when the argument is all digits; titles that are only digits will be treated as ids.
-- No GUI or forward-delete beyond `del`—by design for this version.
+- **GUI:** up to 8 panels; `SDL_RenderDebugText` is ASCII 8×8 only; no rich text or system font.
+- **GUI testing:** `make textbox-smoke` covers logic headlessly; visual polish still needs `./textbox_sandbox` on a display.
+- **CI:** interactive sandbox not run in automated targets; use `make test`, `make smoke`, and `make textbox-smoke`.

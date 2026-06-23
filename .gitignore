@@ -9,6 +9,7 @@
 # Build output
 sticky_notes
 test_runner
+textbox_test_harness
 textbox_sandbox
 *.o
 
