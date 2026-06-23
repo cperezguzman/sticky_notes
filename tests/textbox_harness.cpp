@@ -9,6 +9,7 @@
 #include "sdl_event_helpers.h"
 #include "test_notes_dir.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -81,8 +82,9 @@ void scenario_init_loads_notes_from_disk() {
     StickyGui gui{};
     sticky_gui_init(gui);
 
-    check(sticky_gui_panel_count(gui) == 2, "init loads two note panels");
-    check(sticky_gui_focused_note(gui).title == "Beta", "init focuses last loaded panel");
+    check(sticky_gui_panel_count(gui) == 1, "init loads one desk panel");
+    check(sticky_gui_sidebar_entry_count(gui) == 2, "sidebar lists all notes");
+    check(sticky_gui_focused_note(gui).title == "Beta", "init desk shows most recent note");
 }
 
 void scenario_init_blank_when_no_notes() {
@@ -92,6 +94,7 @@ void scenario_init_blank_when_no_notes() {
     sticky_gui_init(gui);
 
     check(sticky_gui_panel_count(gui) == 1, "init creates blank panel when notes empty");
+    check(sticky_gui_sidebar_entry_count(gui) == 0, "sidebar empty when no notes");
     check(sticky_gui_focused_note(gui).title.empty(), "blank panel has empty title");
 }
 
@@ -103,7 +106,83 @@ void scenario_init_caps_at_eight_notes() {
 
     StickyGui gui{};
     sticky_gui_init(gui);
-    check(sticky_gui_panel_count(gui) == 8, "init loads at most eight panels");
+    check(sticky_gui_panel_count(gui) == 1, "init keeps one note on desk");
+    check(sticky_gui_sidebar_entry_count(gui) == 10, "sidebar lists every saved note");
+}
+
+void scenario_init_spreads_panels_on_grid() {
+    test_notes::TempNotesDir dir;
+    test_notes::write_note_file(0, "Only", "body\n");
+
+    StickyGui gui{};
+    sticky_gui_init(gui);
+
+    const StickyPanel& panel = sticky_gui_panel_at(gui, 0);
+    check(panel.x >= 200.0f, "desk panel sits right of open sidebar");
+}
+
+void scenario_sidebar_toggle() {
+    test_notes::TempNotesDir dir;
+    test_notes::write_note_file(0, "A", "a\n");
+    StickyGui gui{};
+    sticky_gui_init(gui);
+    check(sticky_gui_sidebar_visible(gui), "sidebar open by default");
+
+    bool quit = false;
+    gui_event(gui, sdl_test::ctrl(SDL_SCANCODE_B), quit);
+    check(!sticky_gui_sidebar_visible(gui), "Ctrl+B hides sidebar");
+    gui_event(gui, sdl_test::ctrl(SDL_SCANCODE_B), quit);
+    check(sticky_gui_sidebar_visible(gui), "Ctrl+B shows sidebar again");
+}
+
+void scenario_hover_focuses_panel() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(60, "Back", "a"), 260.0f, 40.0f);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(61, "Front", "b"), 400.0f, 200.0f);
+
+    check(sticky_gui_focused_note(gui).title == "Front", "top panel focused after add");
+
+    bool quit = false;
+    gui_event(gui, sdl_test::mouse_motion(280.0f, 60.0f), quit);
+    check(sticky_gui_focused_note(gui).title == "Back", "hover focuses panel under cursor");
+}
+
+void scenario_body_reflows_when_panel_widened() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(71, "Reflow", ""), 40.0f, 40.0f);
+
+    bool quit = false;
+    for (int i = 0; i < 100; ++i) {
+	gui_type(gui, "d", quit);
+    }
+
+    const float start_w = sticky_gui_panel_at(gui, 0).width;
+    const std::size_t narrow_cols = textbox_body_max_columns(start_w);
+    const std::size_t lines_before = sticky_gui_focused_note(gui).text.size();
+    check(lines_before >= 2, "long line wraps across multiple rows when narrow");
+
+    StickyPanelHitTargets hit{};
+    sticky_gui_panel_hit_targets(sticky_gui_panel_at(gui, 0), hit);
+    gui_event(gui, sdl_test::mouse_button_down(hit.grip_x, hit.grip_y), quit);
+    gui_event(gui, sdl_test::mouse_motion(hit.grip_x + 240.0f, hit.grip_y), quit);
+    gui_event(gui, sdl_test::mouse_button_up(hit.grip_x + 240.0f, hit.grip_y), quit);
+
+    check(sticky_gui_panel_at(gui, 0).width > start_w + 100.0f, "resize grip widens panel");
+    sticky_gui_reflow_panel(gui, 0);
+
+    const std::size_t lines_after = sticky_gui_focused_note(gui).text.size();
+    check(lines_after < lines_before, "widened panel merges soft-wrapped lines");
+    std::size_t max_line = 0;
+    for (const std::string& line : sticky_gui_focused_note(gui).text) {
+	max_line = std::max(max_line, line.size());
+	check(line.size() <= textbox_body_max_columns(sticky_gui_panel_at(gui, 0).width),
+	      "each line fits widened panel");
+    }
+    check(max_line > narrow_cols, "widened panel allows longer line segments");
 }
 
 void scenario_focus_panel_by_click() {
@@ -287,7 +366,7 @@ void scenario_ctrl_n_creates_note_file() {
     gui_type(gui, "fresh", quit);
     gui_event(gui, sdl_test::ctrl(SDL_SCANCODE_S), quit);
 
-    check(sticky_gui_panel_count(gui) == 2, "ctrl+n adds panel to desk");
+    check(sticky_gui_panel_count(gui) == 1, "ctrl+n keeps single desk panel");
     check(std::filesystem::exists("notes/note_20.txt"), "ctrl+n creates note file on save");
     check(body_first_line("notes/note_20.txt") == "fresh", "new note body saved");
 }
@@ -296,14 +375,12 @@ void scenario_max_eight_panels() {
     test_notes::TempNotesDir dir;
     StickyGui gui{};
     sticky_gui_reset(gui);
-    for (int i = 0; i < 8; ++i) {
-	sticky_gui_add_panel_from_note(
-	    gui, test_notes::make_note_on_disk(100 + i, "P" + std::to_string(i), ""), 40.0f + i, 40.0f + i);
-    }
+    sticky_gui_add_panel_from_note(
+	gui, test_notes::make_note_on_disk(100, "First", "one"), 100.0f, 100.0f);
 
     bool quit = false;
     gui_event(gui, sdl_test::ctrl(SDL_SCANCODE_N), quit);
-    check(sticky_gui_panel_count(gui) == 8, "ninth ctrl+n does not exceed max panels");
+    check(sticky_gui_panel_count(gui) == 1, "ctrl+n replaces desk with new blank panel");
 }
 
 void scenario_drag_title_bar_moves_panel() {
@@ -475,6 +552,21 @@ void scenario_theme_cycle() {
     check(gui.theme_id == GuiThemeId::Cyberpunk, "ctrl+3 sets cyberpunk theme");
 }
 
+void scenario_theme_persists_on_reinit() {
+    test_notes::TempNotesDir dir;
+    {
+	StickyGui gui{};
+	sticky_gui_init(gui);
+	bool quit = false;
+	gui_event(gui, sdl_test::ctrl(SDL_SCANCODE_2), quit);
+	check(gui.theme_id == GuiThemeId::Retro, "ctrl+2 sets retro theme");
+    }
+
+    StickyGui reloaded{};
+    sticky_gui_init(reloaded);
+    check(reloaded.theme_id == GuiThemeId::Retro, "theme restored on next init");
+}
+
 void scenario_undo_in_gui() {
     test_notes::TempNotesDir dir;
     StickyGui gui{};
@@ -523,6 +615,8 @@ int main() {
     scenario_init_loads_notes_from_disk();
     scenario_init_blank_when_no_notes();
     scenario_init_caps_at_eight_notes();
+    scenario_init_spreads_panels_on_grid();
+    scenario_sidebar_toggle();
     scenario_focus_panel_by_click();
     scenario_body_typing_and_save();
     scenario_multiline_body_via_enter();
@@ -548,9 +642,12 @@ int main() {
     scenario_f1_toggles_help();
     scenario_title_edit_blocks_body_keys();
     scenario_theme_cycle();
+    scenario_theme_persists_on_reinit();
     scenario_undo_in_gui();
     scenario_find_in_gui();
     scenario_open_picker_focuses_existing();
+    scenario_hover_focuses_panel();
+    scenario_body_reflows_when_panel_widened();
 
     std::cout << "\nResults: " << passes << " passed, " << failures << " failed\n";
     return failures == 0 ? 0 : 1;

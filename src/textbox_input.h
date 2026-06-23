@@ -34,7 +34,11 @@ struct TextboxViewport {
 // One empty body line; same EditorSession shape as the terminal editor.
 void textbox_init_session(EditorSession& session);
 
-bool textbox_apply_key(EditorSession& session, TextboxKeyEvent event);
+bool textbox_apply_key(EditorSession& session, TextboxKeyEvent event, std::size_t max_columns = 0);
+
+void textbox_init_hard_breaks_for_loaded_note(EditorSession& session);
+
+void textbox_enforce_wrap(EditorSession& session, std::size_t max_columns);
 
 std::size_t textbox_line_count(const EditorSession& session);
 

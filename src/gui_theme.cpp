@@ -1,5 +1,10 @@
 #include "gui_theme.h"
 
+#include <algorithm>
+#include <cctype>
+#include <fstream>
+#include <string>
+
 namespace {
 StickyGuiTheme make_minimal() {
     StickyGuiTheme t{};
@@ -73,6 +78,39 @@ StickyGuiTheme make_cyberpunk() {
     t.status_err = {255, 40, 120, 255};
     return t;
 }
+
+void trim_lower_in_place(std::string& s) {
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(),
+				    [](unsigned char c) { return !std::isspace(c); }));
+    s.erase(std::find_if(s.rbegin(), s.rend(),
+			 [](unsigned char c) { return !std::isspace(c); })
+		.base(),
+	    s.end());
+    std::transform(s.begin(), s.end(), s.begin(),
+		   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+}
+
+const char* theme_slug(GuiThemeId id) {
+    switch (id) {
+    case GuiThemeId::Retro:
+	return "retro";
+    case GuiThemeId::Cyberpunk:
+	return "cyberpunk";
+    case GuiThemeId::Minimal:
+    default:
+	return "minimal";
+    }
+}
+
+GuiThemeId theme_from_slug(const std::string& slug) {
+    if (slug == "retro") {
+	return GuiThemeId::Retro;
+    }
+    if (slug == "cyberpunk") {
+	return GuiThemeId::Cyberpunk;
+    }
+    return GuiThemeId::Minimal;
+}
 } // namespace
 
 StickyGuiTheme gui_theme_get(GuiThemeId id) {
@@ -94,6 +132,27 @@ const char* gui_theme_name(GuiThemeId id) {
 GuiThemeId gui_theme_cycle(GuiThemeId current) {
     const int next = (static_cast<int>(current) + 1) % static_cast<int>(GuiThemeId::Count);
     return static_cast<GuiThemeId>(next);
+}
+
+GuiThemeId gui_theme_load_persisted() {
+    std::ifstream in("notes/gui_theme.txt");
+    if (!in) {
+	return GuiThemeId::Minimal;
+    }
+    std::string line;
+    if (!std::getline(in, line)) {
+	return GuiThemeId::Minimal;
+    }
+    trim_lower_in_place(line);
+    return theme_from_slug(line);
+}
+
+void gui_theme_save_persisted(GuiThemeId id) {
+    std::ofstream out("notes/gui_theme.txt");
+    if (!out) {
+	return;
+    }
+    out << theme_slug(id) << '\n';
 }
 
 void gui_set_render_color(SDL_Renderer* renderer, const GuiColor& color) {

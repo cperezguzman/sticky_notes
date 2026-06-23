@@ -76,6 +76,8 @@ Unknown commands print a short error; use `help` for the full list.
 ## On-disk layout
 
 - `notes/next_note_id.txt` — next numeric id to assign (one integer per line).
+- `notes/gui_theme.txt` — last GUI theme (`minimal`, `retro`, or `cyberpunk`); optional (defaults to Minimal).
+- `notes/desk_state.txt` — sidebar open flag + desk note path; optional (defaults to most recently edited note).
 - `notes/note_<id>.txt` — note file; format is sectioned text:
 
   `Title:`, `ID:`, `Created:`, `Last Edited:`, `Body:` (each label on its own line, value on the following line(s); body is the rest of the file).
@@ -95,15 +97,16 @@ src/
   sticky_note.cpp/.h — `sticky_note` struct; timestamps
   textbox_input.*    — platform-neutral multiline key seam (Phase 2–3)
   textbox_sdl.*      — SDL3 adapter + themed panel render
-  gui_theme.*        — desk/panel color themes (Minimal, Retro, Cyberpunk)
+  gui_theme.*        — desk/panel color themes (Minimal, Retro, Cyberpunk); persists to notes/gui_theme.txt
   sticky_gui.*       — Phase 4: multiple panels, drag, resize, load/save
+  sticky_popup.*     — Phase 4+: pop-out notes as always-on-top SDL windows
 sandbox/
-  textbox_main.cpp   — Phase 2 SDL3 window loop
+  textbox_main.cpp   — multi-window SDL loop (desk + floating pop-outs)
 scripts/
   build-sdl3.sh      — vendored SDL3 install (local, gitignored)
 tests/
   test_main.cpp         — unit tests (CLI, editor, codec, GUI logic)
-  textbox_harness.cpp   — Phase 4 integration harness (52 headless scenarios)
+  textbox_harness.cpp   — Phase 4 integration harness (77 headless scenarios)
   textbox_smoke.sh      — runs harness; mirrors manual_smoke.sh for GUI
   sdl_event_helpers.h   — synthetic SDL key/mouse events for tests
   test_notes_dir.h      — isolated temp notes/ per test scenario
@@ -126,15 +129,16 @@ All test commands run from the project root. **GUI tests do not open a window** 
 
 ### Unit tests — `make test`
 
-Builds `test_runner` and runs **38 assertions** covering:
+Builds `test_runner` and runs **35 unit test functions** covering:
 
 | Area | What is checked |
 |------|-----------------|
 | **Parser / codec** | `parse_command`, `parse_note_file` (fixture + malformed) |
 | **Timestamps** | `parse_saved_timestamp_line` round-trip and rejection |
 | **Editor core** | insert, erase, movement, undo, find wrap, yank/paste, lines |
-| **textbox_input** | init, typing, backspace, multiline Enter, line merge, Up/Down |
+| **textbox_input** | init, typing, backspace, multiline Enter, line merge, **wrap/reflow** |
 | **note_store** | `delete_note_file` |
+| **gui_theme** | theme save/load roundtrip (`notes/gui_theme.txt`) |
 | **sticky_gui** | focus z-order, delete confirm (no re-save after Y), hit targets, F2 title edit, help/delete modals block body input |
 | **textbox_sdl** | text input, arrows, Enter, Delete, Esc quit, panel chrome sizes |
 
@@ -146,22 +150,23 @@ Runs `tests/manual_smoke.sh` — **30 automated checks** that pipe commands into
 
 ### GUI smoke — `make textbox-smoke`
 
-Builds `textbox_test_harness` and runs `tests/textbox_smoke.sh` — **60 headless scenarios** that drive `sticky_gui_handle_event()` with synthetic SDL keyboard and mouse events. Covers the **Manual test checklist (GUI)** below (except visual polish). Each scenario uses an isolated temp `notes/` directory.
+Builds `textbox_test_harness` and runs `tests/textbox_smoke.sh` — **77 headless scenarios** that drive `sticky_gui_handle_event()` with synthetic SDL keyboard and mouse events. Covers the **Manual test checklist (GUI)** below (except visual polish and pop-out windows, which need a display). Each scenario uses an isolated temp `notes/` directory.
 
 | Scenario group | Examples |
 |----------------|----------|
-| **Startup** | Load notes from disk, blank desk when empty, cap at 8 panels |
-| **Focus** | Click panel raises z-order |
-| **Body edit** | Type, Enter multiline, Ctrl+S save to disk |
+| **Sidebar** | Ctrl+B toggle; click row opens on desk; drag row to pop out |
+| **Startup** | One most-recent note on desk; rest in sidebar; state in `notes/desk_state.txt` |
+| **Focus** | Click panel raises z-order; **hover** brings panel to front |
+| **Body edit** | Type, Enter multiline, Ctrl+S save; **wrap at panel width**; **reflow on widen** |
 | **Close** | Ctrl+W saves then removes panel; title-bar **x** same |
 | **Delete file** | Ctrl+Shift+W → Y removes file (no resurrection on re-init); N/Esc cancel |
 | **Title** | F2 rename + persist; Esc cancel; whitespace → `Untitled` |
 | **Modals** | H/F1 help blocks typing; delete confirm blocks stray keys |
-| **Open / find / undo** | Ctrl+O picker; Ctrl+F find; Ctrl+Z/Y undo/redo; F3 find next |
-| **Themes** | Ctrl+T cycle; Ctrl+1/2/3 preset themes |
+| **Open / find / undo** | Ctrl+O picker (numbered list); Ctrl+F find; Ctrl+Z/Y undo/redo; F3 find next |
+| **Themes** | Ctrl+T cycle; Ctrl+1/2/3 presets; **persisted in `notes/gui_theme.txt`** |
 | **Create** | Ctrl+N + save creates `notes/note_<id>.txt` |
 | **Mouse** | Drag title bar, resize grip |
-| **Quit path** | `sticky_gui_save_all`, Esc sets quit |
+| **Quit path** | `sticky_gui_save_all`, Esc sets quit (desk only) |
 | **SDL seam** | `textbox_handle_sdl_event` Enter, Delete, backspace merge |
 
 **Regression:** includes automated coverage for **BUG-005** (delete-from-disk must not re-save via `close_panel_at`).
@@ -196,29 +201,52 @@ Rendering uses SDL’s debug bitmap font (`SDL_RenderDebugText`). Body lines out
 
 ## Phase 4 — Multi-note GUI desk
 
-`./textbox_sandbox` is a small sticky-notes desk:
+`./textbox_sandbox` is a small sticky-notes desk with optional **floating pop-out windows**:
 
 | Input | Action |
 |-------|--------|
 | **Click panel** | Focus (brings to front) |
+| **Hover panel** | Focus without clicking (when not dragging) |
 | **Click x** on title bar | Close panel (saves first) |
-| **Drag title bar** | Move panel |
+| **Drag title bar** | Move panel on the desk |
+| **Double-click title bar** | **Pop out** focused note to its own always-on-top window |
+| **Ctrl+Shift+P** | Pop out focused note (same as double-click title) |
 | **Drag bottom-right grip** | Resize focused panel |
 | **F2** | Rename note title |
-| **Ctrl+O** | Open note picker (loads from `notes/` or focuses open panel) |
+| **Ctrl+O** | Open note picker — numbered list (`1. Title`); loads from `notes/` or focuses open panel |
 | **Ctrl+S** | Save focused note (shows **Saved** toast) |
 | **Ctrl+Z** / **Ctrl+Y** | Undo / redo body edit |
 | **Ctrl+F** | Find bar — type needle, **Enter** to search |
 | **F3** | Find next match |
 | **Ctrl+N** | New note (saved to `notes/`) |
-| **Ctrl+W** | Close focused panel (saves first) |
+| **Ctrl+W** | Close focused panel on desk (saves first) |
 | **Ctrl+Shift+W** | Delete note file from disk (Y/N confirm) |
 | **Ctrl+T** | Cycle theme: Minimal → Retro → Cyberpunk |
 | **Ctrl+1** / **Ctrl+2** / **Ctrl+3** | Jump to Minimal / Retro / Cyberpunk |
-| **H** or **F1** | Toggle help overlay |
-| **Esc** | Quit (saves all notes with paths); cancels title edit / confirm |
+| **Ctrl+B** | Toggle notes sidebar |
+| **Sidebar click** | Show that note on the desk (replaces current desk note) |
+| **Sidebar drag** | Pop note out to a floating window |
+| **Esc** | Quit desk app (saves all notes with paths); cancels title edit / confirm on desk |
 
-On startup, loads every note from `notes/` (up to 8). Uses the same on-disk format as the CLI.
+**Pop-out window** (after double-click title or Ctrl+Shift+P) — frameless (no OS title bar; only the themed panel chrome). Title drag uses global screen coordinates; rendering is paused during drag to avoid compositor ghosting (documented as BUG-006 / BUG-007 in `docs/portfolio/sticky-notes/bug-log.md`).
+
+| Input | Action |
+|-------|--------|
+| **Drag title bar** | Move the OS window |
+| **Resize grip** | Resize window (body reflows to new width) |
+| **v** button | **Dock** back to main desk |
+| **Double-click title** | Dock back to desk |
+| **x** / window close | Save and close pop-out only (desk keeps running) |
+| **Esc** | Does **not** quit the app (desk still open) |
+
+On startup, opens **one note** on the desk (last saved desk note, or most recently edited on disk). All other notes appear in the **sidebar** (sorted by last edited). **Desk state** persists in `notes/desk_state.txt`. Uses the same on-disk format as the CLI. **Theme choice** persists in `notes/gui_theme.txt` across restarts. Body text **wraps** to panel width; narrowing then widening a panel reflows soft-wrapped lines (manual **Enter** still creates hard line breaks).
+
+### Notes sidebar
+
+- **Ctrl+B** or the **<** / **>** tab on the left edge toggles the sidebar.
+- Lists every saved note (most recently edited first). Highlight = on desk.
+- **Click** a row to show that note on the desk.
+- **Drag** a row outward to pop it out automatically.
 
 ### Themes
 
@@ -228,7 +256,7 @@ On startup, loads every note from `notes/` (up to 8). Uses the same on-disk form
 | **Retro** | Win95-style grey desktop, navy title bars, white body, beveled edges |
 | **Cyberpunk** | Black desk, matrix-green text, magenta caret, neon borders |
 
-Switch with **Ctrl+T** or **Ctrl+1/2/3**. Theme badge shown top-left.
+Switch with **Ctrl+T** or **Ctrl+1/2/3**. Theme badge shown top-left. Last choice is saved to `notes/gui_theme.txt` and restored on next launch.
 
 **One-time:** build SDL3 into `third_party/` (gitignored):
 
@@ -266,24 +294,31 @@ Automated by `make smoke` (30 checks). Backs up and restores your `notes/` direc
 
 ## Manual test checklist (GUI)
 
-Automated by `make textbox-smoke` (52 headless checks). Run `./textbox_sandbox` on your display for visual verification.
+Automated by `make textbox-smoke` (77 headless checks). Run `./textbox_sandbox` on your display for visual verification, sidebar drag, and pop-out windows.
 
-- [ ] Startup loads notes from `notes/` (up to 8 panels).
-- [ ] Click panel focuses it; drag title bar moves; grip resizes.
-- [ ] Type, Enter, arrows, Backspace merge — same as Phase 3 in focused body.
-- [ ] **Ctrl+O** opens note picker; selecting open note focuses it without duplicate.
+- [ ] Startup shows **one** note on desk; others listed in sidebar.
+- [ ] **Ctrl+B** toggles sidebar; **<** / **>** tab works.
+- [ ] **Click** sidebar row swaps desk note; highlight follows.
+- [ ] **Drag** sidebar row pops note out to floating window.
+- [ ] **Hover** over a panel focuses it without clicking.
+- [ ] Click panel focuses it; drag title bar moves; grip resizes; body **wraps** at panel edge.
+- [ ] Narrow then widen a panel — text **reflows** to use full width (Enter breaks stay separate).
+- [ ] **Ctrl+O** opens note picker with **numbered titles**; selecting open note focuses without duplicate.
 - [ ] **Ctrl+S** saves and shows toast; **Ctrl+Z/Y** undo/redo in body.
 - [ ] **Ctrl+F** + **Enter** finds text; **F3** find next.
-- [ ] **Ctrl+T** and **Ctrl+1/2/3** switch Minimal / Retro / Cyberpunk themes.
-- [ ] **Ctrl+W** / title-bar **x** closes panel (saves first).
+- [ ] **Ctrl+T** and **Ctrl+1/2/3** switch themes; restart app — **theme persists**.
+- [ ] **Double-click title** or **Ctrl+Shift+P** pops note to always-on-top window.
+- [ ] Pop-out: drag title moves window; **v** or double-click title **docks** back; **x** closes pop-out only.
+- [ ] **Ctrl+W** / title-bar **x** closes desk panel (saves first).
 - [ ] **Ctrl+Shift+W** → Y deletes file from disk; N/Esc cancels.
-- [ ] **H** / **F1** help overlay; **Esc** quits and saves all notes with paths.
+- [ ] **H** / **F1** help overlay; **Esc** on desk quits and saves all notes with paths.
 
 ## Limitations
 
 - **CLI:** one active note at a time; switching uses `open` / `create`.
 - **Titles** for `open` / `view` must match **exactly** when not using a numeric id.
 - Opening by id when the argument is all digits; titles that are only digits will be treated as ids.
-- **GUI:** up to 8 panels; `SDL_RenderDebugText` is ASCII 8×8 only; no rich text or system font.
-- **GUI testing:** `make textbox-smoke` covers logic headlessly; visual polish still needs `./textbox_sandbox` on a display.
+- **GUI:** up to 8 panels on desk; unlimited **pop-out** windows; `SDL_RenderDebugText` is ASCII 8×8 only; no rich text or system font.
+- **Open picker** shows numbered list position, not storage id (CLI `list` / `open <id>` still use file ids).
+- **GUI testing:** `make textbox-smoke` covers desk logic headlessly; pop-out windows and visual polish need `./textbox_sandbox` on a display.
 - **CI:** interactive sandbox not run in automated targets; use `make test`, `make smoke`, and `make textbox-smoke`.

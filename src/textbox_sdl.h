@@ -7,20 +7,26 @@
 #include <SDL3/SDL.h>
 
 // SDL adapter: maps platform events to the textbox_input seam.
-bool textbox_handle_sdl_event(EditorSession& session, const SDL_Event& event, bool& quit_requested);
+bool textbox_handle_sdl_event(EditorSession& session, const SDL_Event& event, bool& quit_requested,
+			      std::size_t max_body_columns = 0, bool quit_on_escape = true);
+
+std::size_t textbox_body_max_columns(float panel_width);
 
 // Sticky-note panel: title bar + multiline body (clipped / scrolled via viewport).
 float sticky_panel_title_bar_height();
 
 float sticky_panel_close_button_width();
 
+float sticky_panel_dock_button_width();
+
 struct PanelChrome {
     const char* title_text = nullptr;
     bool show_close_button = false;
+    bool show_dock_button = false;
     bool title_caret_visible = false;
     std::size_t title_caret_col = 0;
 };
 
 void textbox_render_panel(SDL_Renderer* renderer, float x, float y, float width, float height,
-			  const EditorSession& session, TextboxViewport& viewport, bool focused,
+			  EditorSession& session, TextboxViewport& viewport, bool focused,
 			  const PanelChrome& chrome, const StickyGuiTheme& theme);

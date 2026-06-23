@@ -8,6 +8,7 @@
 
 struct EditorSnapshot {
     std::vector<std::string> text;
+    std::vector<bool> hard_line_break_after;
     std::size_t current_line = 0;
     std::size_t current_column = 0;
 };
@@ -18,6 +19,8 @@ struct EditorSession {
     std::size_t current_line = 0;
     // 0-based column within the line; may equal line.length() (insert after last char).
     std::size_t current_column = 0;
+    // hard_line_break_after[i] == true: user pressed Enter after line i (not soft wrap).
+    std::vector<bool> hard_line_break_after;
     std::vector<EditorSnapshot> undo_stack;
     std::vector<EditorSnapshot> redo_stack;
     std::string find_needle;

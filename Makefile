@@ -16,7 +16,7 @@ HARNESS_SRCS = tests/textbox_harness.cpp src/sticky_gui.cpp src/textbox_input.cp
 	src/gui_theme.cpp src/note_editor.cpp src/sticky_note.cpp src/note_store.cpp \
 	src/note_file_codec.cpp src/parser.cpp
 
-TEXTBOX_SRCS = sandbox/textbox_main.cpp src/sticky_gui.cpp src/textbox_input.cpp src/textbox_sdl.cpp \
+TEXTBOX_SRCS = sandbox/textbox_main.cpp src/sticky_gui.cpp src/sticky_popup.cpp src/textbox_input.cpp src/textbox_sdl.cpp \
 	src/gui_theme.cpp src/note_editor.cpp src/sticky_note.cpp src/note_store.cpp \
 	src/note_file_codec.cpp src/parser.cpp
 

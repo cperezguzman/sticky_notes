@@ -2,6 +2,7 @@
 #include "note_file_codec.h"
 #include "note_store.h"
 #include "parser.h"
+#include "gui_theme.h"
 #include "sticky_gui.h"
 #include "sticky_note.h"
 #include "textbox_input.h"
@@ -267,6 +268,39 @@ void test_textbox_join_lines_on_backspace() {
     check(textbox_cursor_column(session) == 2, "cursor at join point");
 }
 
+void test_textbox_wrap_long_line() {
+    EditorSession session{};
+    textbox_init_session(session);
+    for (char c = 'a'; c <= 'j'; ++c) {
+	textbox_apply_key(session, {TextboxKeyKind::Character, static_cast<char32_t>(c)}, 4);
+    }
+    check(session.note.text.size() == 3, "wrap splits overflow into new lines");
+    check(session.note.text[0] == "abcd", "first wrapped segment");
+    check(session.note.text[1] == "efgh", "second wrapped segment");
+    check(session.note.text[2] == "ij", "final wrapped segment");
+    check(textbox_body_max_columns(280.0f) >= 10, "panel width yields usable column count");
+}
+
+void test_textbox_reflow_on_widen() {
+    EditorSession session{};
+    textbox_init_session(session);
+    for (char c = 'a'; c <= 'h'; ++c) {
+	textbox_apply_key(session, {TextboxKeyKind::Character, static_cast<char32_t>(c)}, 4);
+    }
+    check(session.note.text.size() == 2, "narrow wrap creates two soft lines");
+
+    textbox_enforce_wrap(session, 20);
+    check(session.note.text.size() == 1, "widening merges soft-wrapped lines");
+    check(session.note.text[0] == "abcdefgh", "merged paragraph text preserved");
+
+    textbox_apply_key(session, {TextboxKeyKind::Newline, 0}, 20);
+    textbox_apply_key(session, {TextboxKeyKind::Character, U'z'}, 20);
+    textbox_enforce_wrap(session, 20);
+    check(session.note.text.size() == 2, "hard newline stays after reflow");
+    check(session.note.text[0] == "abcdefgh", "first paragraph unchanged");
+    check(session.note.text[1] == "z", "second paragraph preserved");
+}
+
 void test_move_up_down() {
     EditorSession session{};
     write_to_current_line(session, "ab");
@@ -291,12 +325,12 @@ void test_sticky_gui_focus_raises_z_order() {
     test_notes::TempNotesDir dir;
     StickyGui gui{};
     sticky_gui_reset(gui);
-    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(0, "First", "a"), 40.0f, 40.0f);
-    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(1, "Second", "b"), 80.0f, 80.0f);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(0, "First", "a"), 260.0f, 40.0f);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(1, "Second", "b"), 300.0f, 80.0f);
 
     bool quit = false;
-    sticky_gui_handle_event(gui, sdl_test::mouse_button_down(50.0f, 50.0f), quit);
-    sticky_gui_handle_event(gui, sdl_test::mouse_button_up(50.0f, 50.0f), quit);
+    sticky_gui_handle_event(gui, sdl_test::mouse_button_down(270.0f, 50.0f), quit);
+    sticky_gui_handle_event(gui, sdl_test::mouse_button_up(270.0f, 50.0f), quit);
 
     check(sticky_gui_focused_note(gui).title == "First", "click raises back panel to focus");
     check(sticky_gui_focused_index(gui) == sticky_gui_panel_count(gui) - 1,
@@ -399,6 +433,24 @@ void test_sticky_panel_chrome_sizes() {
     check(sticky_panel_title_bar_height() > 0.0f, "title bar height positive");
     check(sticky_panel_close_button_width() > 0.0f, "close button width positive");
 }
+
+void test_gui_theme_persistence() {
+    test_notes::TempNotesDir dir;
+    check(gui_theme_load_persisted() == GuiThemeId::Minimal, "missing theme file defaults minimal");
+
+    gui_theme_save_persisted(GuiThemeId::Cyberpunk);
+    check(gui_theme_load_persisted() == GuiThemeId::Cyberpunk, "theme save/load roundtrip");
+
+    std::ofstream out("notes/gui_theme.txt");
+    out << "  RETRO  \n";
+    out.close();
+    check(gui_theme_load_persisted() == GuiThemeId::Retro, "theme load trims and ignores case");
+
+    std::ofstream bad("notes/gui_theme.txt");
+    bad << "unknown\n";
+    bad.close();
+    check(gui_theme_load_persisted() == GuiThemeId::Minimal, "invalid theme slug defaults minimal");
+}
 } // namespace
 
 int main() {
@@ -424,6 +476,8 @@ int main() {
     test_textbox_backspace_and_navigation();
     test_textbox_multiline_newline_and_arrows();
     test_textbox_join_lines_on_backspace();
+    test_textbox_wrap_long_line();
+    test_textbox_reflow_on_widen();
     test_move_up_down();
     test_delete_note_file();
     test_sticky_gui_focus_raises_z_order();
@@ -434,6 +488,7 @@ int main() {
     test_textbox_sdl_text_and_arrows();
     test_textbox_sdl_delete_key();
     test_sticky_panel_chrome_sizes();
+    test_gui_theme_persistence();
 
     if (failures == 0) {
 	std::cout << "All tests passed.\n";

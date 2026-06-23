@@ -41,11 +41,13 @@ void touch_edit(EditorSession& session) {
 }
 
 EditorSnapshot make_snapshot(const EditorSession& session) {
-    return EditorSnapshot{session.note.text, session.current_line, session.current_column};
+    return EditorSnapshot{session.note.text, session.hard_line_break_after, session.current_line,
+			  session.current_column};
 }
 
 void apply_snapshot(EditorSession& session, const EditorSnapshot& snap) {
     session.note.text = snap.text;
+    session.hard_line_break_after = snap.hard_line_break_after;
     session.current_line = snap.current_line;
     session.current_column = snap.current_column;
     clamp_column_to_line(session);
@@ -410,6 +412,10 @@ void insert_newline_at_cursor(EditorSession& session) {
 			     tail);
     session.current_line += 1;
     session.current_column = 0;
+
+    session.hard_line_break_after.resize(session.note.text.size(), false);
+    session.hard_line_break_after[session.current_line - 1] = true;
+
     touch_edit(session);
 }
 
@@ -424,6 +430,12 @@ EditStatus join_with_previous_line(EditorSession& session) {
     prev += current_line_ref(session);
     session.note.text.erase(session.note.text.begin()
 			    + static_cast<std::ptrdiff_t>(session.current_line));
+    if (session.current_line > 0
+	&& session.current_line - 1 < session.hard_line_break_after.size()) {
+	session.hard_line_break_after.erase(
+	    session.hard_line_break_after.begin()
+	    + static_cast<std::ptrdiff_t>(session.current_line - 1));
+    }
     session.current_line -= 1;
     session.current_column = join_at;
     touch_edit(session);

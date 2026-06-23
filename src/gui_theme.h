@@ -42,4 +42,9 @@ const char* gui_theme_name(GuiThemeId id);
 
 GuiThemeId gui_theme_cycle(GuiThemeId current);
 
+// Persists to notes/gui_theme.txt (created on save; missing file => Minimal).
+GuiThemeId gui_theme_load_persisted();
+
+void gui_theme_save_persisted(GuiThemeId id);
+
 void gui_set_render_color(SDL_Renderer* renderer, const GuiColor& color);

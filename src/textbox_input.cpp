@@ -1,70 +1,226 @@
 #include "textbox_input.h"
 
+#include <utility>
+
 namespace {
 bool is_printable_ascii(char32_t ch) {
     return ch >= 32 && ch <= 126;
 }
+
+std::size_t paragraph_start_line(const EditorSession& session, std::size_t line) {
+    while (line > 0) {
+	const std::size_t prev = line - 1;
+	if (prev < session.hard_line_break_after.size()
+	    && session.hard_line_break_after[prev]) {
+	    break;
+	}
+	--line;
+    }
+    return line;
+}
+
+std::pair<std::size_t, std::size_t> save_cursor_paragraph(const EditorSession& session) {
+    const std::size_t start = paragraph_start_line(session, session.current_line);
+    std::size_t para = 0;
+    for (std::size_t i = 0; i < start; ++i) {
+	if (i < session.hard_line_break_after.size() && session.hard_line_break_after[i]) {
+	    ++para;
+	}
+    }
+
+    std::size_t off = 0;
+    for (std::size_t i = start; i < session.current_line; ++i) {
+	off += session.note.text[i].size();
+    }
+    off += session.current_column;
+    return {para, off};
+}
+
+void restore_cursor_paragraph(EditorSession& session, std::size_t target_para, std::size_t target_off) {
+    if (session.note.text.empty()) {
+	session.current_line = 0;
+	session.current_column = 0;
+	return;
+    }
+
+    std::size_t para = 0;
+    std::size_t off = 0;
+    for (std::size_t i = 0; i < session.note.text.size(); ++i) {
+	const std::size_t len = session.note.text[i].size();
+	if (para == target_para && target_off >= off && target_off <= off + len) {
+	    session.current_line = i;
+	    session.current_column = target_off - off;
+	    return;
+	}
+
+	off += len;
+
+	const bool hard = i < session.hard_line_break_after.size()
+	    && session.hard_line_break_after[i];
+	if (hard) {
+	    if (para == target_para && target_off == off) {
+		session.current_line = i;
+		session.current_column = len;
+		return;
+	    }
+	    ++para;
+	    off = 0;
+	}
+    }
+
+    session.current_line = session.note.text.size() - 1;
+    session.current_column = session.note.text.back().size();
+}
 } // namespace
+
+void textbox_init_hard_breaks_for_loaded_note(EditorSession& session) {
+    const std::size_t n = session.note.text.size();
+    session.hard_line_break_after.assign(n, false);
+    for (std::size_t i = 0; i + 1 < n; ++i) {
+	session.hard_line_break_after[i] = true;
+    }
+}
+
+void textbox_enforce_wrap(EditorSession& session, std::size_t max_columns) {
+    if (max_columns == 0) {
+	return;
+    }
+    if (session.note.text.empty()) {
+	session.note.text.push_back("");
+    }
+    if (session.hard_line_break_after.size() != session.note.text.size()) {
+	textbox_init_hard_breaks_for_loaded_note(session);
+    }
+
+    const auto [target_para, target_off] = save_cursor_paragraph(session);
+
+    std::vector<std::string> new_lines;
+    std::vector<bool> new_breaks;
+    new_lines.reserve(session.note.text.size());
+    new_breaks.reserve(session.note.text.size());
+
+    std::size_t i = 0;
+    while (i < session.note.text.size()) {
+	std::string para = session.note.text[i];
+	bool hard_end = i < session.hard_line_break_after.size()
+	    ? session.hard_line_break_after[i]
+	    : false;
+	std::size_t j = i;
+	while (j + 1 < session.note.text.size()) {
+	    const bool br = j < session.hard_line_break_after.size()
+		? session.hard_line_break_after[j]
+		: false;
+	    if (br) {
+		break;
+	    }
+	    para += session.note.text[j + 1];
+	    hard_end = j + 1 < session.hard_line_break_after.size()
+		? session.hard_line_break_after[j + 1]
+		: false;
+	    ++j;
+	}
+
+	if (para.empty()) {
+	    new_lines.emplace_back("");
+	    new_breaks.push_back(hard_end);
+	} else {
+	    for (std::size_t pos = 0; pos < para.size(); pos += max_columns) {
+		const bool last_seg = pos + max_columns >= para.size();
+		new_lines.push_back(para.substr(pos, max_columns));
+		new_breaks.push_back(last_seg ? hard_end : false);
+	    }
+	}
+	i = j + 1;
+    }
+
+    if (new_lines.empty()) {
+	new_lines.emplace_back("");
+	new_breaks.push_back(false);
+    }
+
+    session.note.text = std::move(new_lines);
+    session.hard_line_break_after = std::move(new_breaks);
+    restore_cursor_paragraph(session, target_para, target_off);
+}
 
 void textbox_init_session(EditorSession& session) {
     session = EditorSession{};
     session.note.text.clear();
     session.note.text.push_back("");
+    session.hard_line_break_after = {false};
     session.current_line = 0;
     session.current_column = 0;
     editor_clear_history(session);
 }
 
-bool textbox_apply_key(EditorSession& session, TextboxKeyEvent event) {
+bool textbox_apply_key(EditorSession& session, TextboxKeyEvent event, std::size_t max_columns) {
     if (session.note.text.empty()) {
 	textbox_init_session(session);
     }
 
+    bool handled = false;
     switch (event.kind) {
     case TextboxKeyKind::Character:
 	if (!is_printable_ascii(event.character)) {
 	    return false;
 	}
 	insert_at_cursor(session, std::string(1, static_cast<char>(event.character)));
-	return true;
+	handled = true;
+	break;
 
     case TextboxKeyKind::Backspace:
 	if (session.current_column == 0 && session.current_line > 0) {
-	    return join_with_previous_line(session) == EditStatus::Ok;
+	    handled = join_with_previous_line(session) == EditStatus::Ok;
+	} else {
+	    handled = erase_char_before(session) == EditStatus::Ok;
 	}
-	return erase_char_before(session) == EditStatus::Ok;
+	break;
 
     case TextboxKeyKind::Delete:
-	return delete_at_cursor(session) == EditStatus::Ok;
+	handled = delete_at_cursor(session) == EditStatus::Ok;
+	break;
 
     case TextboxKeyKind::Left:
 	move_left(session);
-	return true;
+	handled = true;
+	break;
 
     case TextboxKeyKind::Right:
 	move_right(session);
-	return true;
+	handled = true;
+	break;
 
     case TextboxKeyKind::Up:
 	move_up(session);
-	return true;
+	handled = true;
+	break;
 
     case TextboxKeyKind::Down:
 	move_down(session);
-	return true;
+	handled = true;
+	break;
 
     case TextboxKeyKind::Home:
-	return move_home(session) == EditStatus::Ok;
+	handled = move_home(session) == EditStatus::Ok;
+	break;
 
     case TextboxKeyKind::End:
-	return move_end(session) == EditStatus::Ok;
+	handled = move_end(session) == EditStatus::Ok;
+	break;
 
     case TextboxKeyKind::Newline:
 	insert_newline_at_cursor(session);
-	return true;
+	handled = true;
+	break;
+
+    default:
+	return false;
     }
 
-    return false;
+    if (handled && max_columns > 0) {
+	textbox_enforce_wrap(session, max_columns);
+    }
+    return handled;
 }
 
 std::size_t textbox_line_count(const EditorSession& session) {

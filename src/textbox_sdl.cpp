@@ -43,6 +43,11 @@ std::size_t visible_body_lines(float body_height) {
     return std::max<std::size_t>(1, static_cast<std::size_t>(inner / kLineH));
 }
 
+std::size_t max_body_columns(float panel_width) {
+    const float inner = std::max(panel_width - 2.0f * kPadding, kCharW);
+    return std::max<std::size_t>(1, static_cast<std::size_t>(inner / kCharW));
+}
+
 std::string panel_title(const EditorSession& session) {
     if (session.note.title.empty()) {
 	return "Untitled";
@@ -74,7 +79,16 @@ float sticky_panel_close_button_width() {
     return kLineH + kPadding;
 }
 
-bool textbox_handle_sdl_event(EditorSession& session, const SDL_Event& event, bool& quit_requested) {
+float sticky_panel_dock_button_width() {
+    return kLineH + kPadding;
+}
+
+std::size_t textbox_body_max_columns(float panel_width) {
+    return max_body_columns(panel_width);
+}
+
+bool textbox_handle_sdl_event(EditorSession& session, const SDL_Event& event, bool& quit_requested,
+			      std::size_t max_body_columns, bool quit_on_escape) {
     switch (event.type) {
     case SDL_EVENT_QUIT:
     case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
@@ -86,7 +100,9 @@ bool textbox_handle_sdl_event(EditorSession& session, const SDL_Event& event, bo
 	const bool is_escape = event.key.scancode == SDL_SCANCODE_ESCAPE
 	    || event.key.key == SDLK_ESCAPE;
 	if (is_escape && event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat) {
-	    quit_requested = true;
+	    if (quit_on_escape) {
+		quit_requested = true;
+	    }
 	    return true;
 	}
 	if (event.type != SDL_EVENT_KEY_DOWN || event.key.repeat) {
@@ -94,7 +110,7 @@ bool textbox_handle_sdl_event(EditorSession& session, const SDL_Event& event, bo
 	}
 	const TextboxKeyEvent mapped = key_from_scancode(event.key.scancode);
 	if (mapped.kind != TextboxKeyKind::Character) {
-	    return textbox_apply_key(session, mapped);
+	    return textbox_apply_key(session, mapped, max_body_columns);
 	}
 	return false;
     }
@@ -106,7 +122,8 @@ bool textbox_handle_sdl_event(EditorSession& session, const SDL_Event& event, bo
 	for (const char* p = event.text.text; *p != '\0'; ++p) {
 	    const unsigned char byte = static_cast<unsigned char>(*p);
 	    if (byte >= 32 && byte <= 126) {
-		textbox_apply_key(session, {TextboxKeyKind::Character, static_cast<char32_t>(byte)});
+		textbox_apply_key(session, {TextboxKeyKind::Character, static_cast<char32_t>(byte)},
+				  max_body_columns);
 	    }
 	}
 	return true;
@@ -117,7 +134,7 @@ bool textbox_handle_sdl_event(EditorSession& session, const SDL_Event& event, bo
 }
 
 void textbox_render_panel(SDL_Renderer* renderer, float x, float y, float width, float height,
-			  const EditorSession& session, TextboxViewport& viewport, bool focused,
+			  EditorSession& session, TextboxViewport& viewport, bool focused,
 			  const PanelChrome& chrome, const StickyGuiTheme& theme) {
     SDL_FRect panel{x, y, width, height};
     gui_set_render_color(renderer, theme.panel_fill);
@@ -147,6 +164,17 @@ void textbox_render_panel(SDL_Renderer* renderer, float x, float y, float width,
 	SDL_RenderDebugText(renderer, btn_x + 4.0f, y + kPadding, "x");
     }
 
+    if (chrome.show_dock_button) {
+	const float btn_w = sticky_panel_dock_button_width();
+	const float close_w = chrome.show_close_button ? sticky_panel_close_button_width() : 0.0f;
+	const float btn_x = x + width - close_w - btn_w - kPadding;
+	SDL_FRect dock_btn{btn_x, y + kPadding * 0.5f, btn_w, kLineH};
+	gui_set_render_color(renderer, theme.close_btn);
+	SDL_RenderFillRect(renderer, &dock_btn);
+	gui_set_render_color(renderer, theme.close_text);
+	SDL_RenderDebugText(renderer, btn_x + 4.0f, y + kPadding, "v");
+    }
+
     if (chrome.title_caret_visible) {
 	const float caret_x = x + kPadding + static_cast<float>(chrome.title_caret_col) * kCharW;
 	SDL_FRect title_caret{caret_x, y + kPadding, 2.0f, kLineH};
@@ -159,6 +187,9 @@ void textbox_render_panel(SDL_Renderer* renderer, float x, float y, float width,
     SDL_FRect body{x, body_y, width, body_h};
     gui_set_render_color(renderer, theme.body);
     SDL_RenderFillRect(renderer, &body);
+
+    const std::size_t max_cols = max_body_columns(width);
+    textbox_enforce_wrap(session, max_cols);
 
     const std::size_t visible = visible_body_lines(body_h);
     textbox_scroll_to_cursor(viewport, session, visible);
