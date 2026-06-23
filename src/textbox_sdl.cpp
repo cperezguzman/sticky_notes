@@ -55,6 +55,10 @@ float sticky_panel_title_bar_height() {
     return kLineH + 2.0f * kPadding;
 }
 
+float sticky_panel_close_button_width() {
+    return kLineH + kPadding;
+}
+
 bool textbox_handle_sdl_event(EditorSession& session, const SDL_Event& event, bool& quit_requested) {
     switch (event.type) {
     case SDL_EVENT_QUIT:
@@ -98,7 +102,8 @@ bool textbox_handle_sdl_event(EditorSession& session, const SDL_Event& event, bo
 }
 
 void textbox_render_panel(SDL_Renderer* renderer, float x, float y, float width, float height,
-			  const EditorSession& session, TextboxViewport& viewport, bool focused) {
+			  const EditorSession& session, TextboxViewport& viewport, bool focused,
+			  const PanelChrome& chrome) {
     SDL_FRect panel{x, y, width, height};
     SDL_SetRenderDrawColor(renderer, 50, 48, 42, 255);
     SDL_RenderFillRect(renderer, &panel);
@@ -115,7 +120,25 @@ void textbox_render_panel(SDL_Renderer* renderer, float x, float y, float width,
     SDL_RenderFillRect(renderer, &title_bar);
 
     SDL_SetRenderDrawColor(renderer, 255, 248, 220, 255);
-    SDL_RenderDebugText(renderer, x + kPadding, y + kPadding, panel_title(session).c_str());
+    const char* title = chrome.title_text != nullptr ? chrome.title_text : panel_title(session).c_str();
+    SDL_RenderDebugText(renderer, x + kPadding, y + kPadding, title);
+
+    if (chrome.show_close_button) {
+	const float btn_w = sticky_panel_close_button_width();
+	const float btn_x = x + width - btn_w - kPadding * 0.5f;
+	SDL_FRect close_btn{btn_x, y + kPadding * 0.5f, btn_w, kLineH};
+	SDL_SetRenderDrawColor(renderer, 120, 50, 50, 255);
+	SDL_RenderFillRect(renderer, &close_btn);
+	SDL_SetRenderDrawColor(renderer, 255, 200, 200, 255);
+	SDL_RenderDebugText(renderer, btn_x + 4.0f, y + kPadding, "x");
+    }
+
+    if (chrome.title_caret_visible) {
+	const float caret_x = x + kPadding + static_cast<float>(chrome.title_caret_col) * kCharW;
+	SDL_FRect title_caret{caret_x, y + kPadding, 2.0f, kLineH};
+	SDL_SetRenderDrawColor(renderer, 255, 220, 80, 255);
+	SDL_RenderFillRect(renderer, &title_caret);
+    }
 
     const float body_y = y + title_bar_h;
     const float body_h = height - title_bar_h;

@@ -11,5 +11,15 @@ bool textbox_handle_sdl_event(EditorSession& session, const SDL_Event& event, bo
 // Sticky-note panel: title bar + multiline body (clipped / scrolled via viewport).
 float sticky_panel_title_bar_height();
 
+float sticky_panel_close_button_width();
+
+struct PanelChrome {
+    const char* title_text = nullptr;
+    bool show_close_button = false;
+    bool title_caret_visible = false;
+    std::size_t title_caret_col = 0;
+};
+
 void textbox_render_panel(SDL_Renderer* renderer, float x, float y, float width, float height,
-			  const EditorSession& session, TextboxViewport& viewport, bool focused = true);
+			  const EditorSession& session, TextboxViewport& viewport, bool focused,
+			  const PanelChrome& chrome = {});

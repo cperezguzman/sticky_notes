@@ -6,6 +6,7 @@
 #include <SDL3/SDL.h>
 
 #include <cstddef>
+#include <string>
 #include <vector>
 
 struct StickyPanel {
@@ -25,6 +26,14 @@ struct StickyGui {
     std::size_t active_panel = 0;
     float drag_offset_x = 0.0f;
     float drag_offset_y = 0.0f;
+
+    bool show_help = false;
+    bool editing_title = false;
+    std::string title_edit_buffer;
+    std::size_t title_cursor = 0;
+
+    bool pending_delete = false;
+    std::size_t pending_delete_panel = 0;
 };
 
 void sticky_gui_init(StickyGui& gui);

@@ -38,6 +38,9 @@ void ensure_notes_data_dir();
 
 bool rename_current_note(sticky_note& sn, const std::string& new_title);
 
+// Remove note file from disk. Returns false if path empty or remove failed.
+bool delete_note_file(const std::string& path);
+
 std::string format_note_as_markdown(const sticky_note& sn);
 
 std::string default_markdown_export_path(const sticky_note& sn);

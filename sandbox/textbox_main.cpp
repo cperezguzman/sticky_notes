@@ -35,20 +35,10 @@ int main(int argc, char* argv[]) {
     sticky_gui_init(gui);
 
     bool quit_requested = false;
-    bool esc_was_down = false;
     while (!quit_requested) {
 	SDL_Event event;
 	while (SDL_PollEvent(&event)) {
 	    sticky_gui_handle_event(gui, event, quit_requested);
-	}
-
-	const bool* keys = SDL_GetKeyboardState(nullptr);
-	if (keys != nullptr) {
-	    const bool esc_down = keys[SDL_SCANCODE_ESCAPE];
-	    if (esc_down && !esc_was_down) {
-		quit_requested = true;
-	    }
-	    esc_was_down = esc_down;
 	}
 
 	SDL_SetRenderDrawColor(renderer, 28, 28, 32, 255);

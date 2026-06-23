@@ -131,19 +131,34 @@ Single-line GUI textbox using **SDL3** and the same `EditorSession` / editor cor
 
 Multiline textbox in one **sticky-note panel** (title bar + scrollable body). Same `EditorSession` / `note.text` lines as the terminal.
 
-## Phase 4 — Multi-note GUI (in progress)
+| Input | Action |
+|-------|--------|
+| Type | Insert at cursor |
+| **Enter** | Split line at cursor (`newline`) |
+| **Backspace** at line start | Merge with previous line |
+| **Backspace** / **Delete** | Erase before / at cursor |
+| **Arrow keys** | Move cursor (including across lines) |
+| **Home** / **End** | Start / end of current line |
 
-`./textbox_sandbox` is now a small sticky-notes desk:
+Rendering uses SDL’s debug bitmap font (`SDL_RenderDebugText`). Body lines outside the panel clip via scroll (`TextboxViewport`). Input: `textbox_apply_key` → silent `note_editor` core.
+
+## Phase 4 — Multi-note GUI desk
+
+`./textbox_sandbox` is a small sticky-notes desk:
 
 | Input | Action |
 |-------|--------|
 | **Click panel** | Focus (brings to front) |
+| **Click x** on title bar | Close panel (saves first) |
 | **Drag title bar** | Move panel |
 | **Drag bottom-right grip** | Resize focused panel |
+| **F2** | Rename note title |
 | **Ctrl+N** | New note (saved to `notes/`) |
 | **Ctrl+W** | Close focused panel (saves first) |
+| **Ctrl+Shift+W** | Delete note file from disk (Y/N confirm) |
 | **Ctrl+S** | Save focused note |
-| **Esc** / window **X** | Quit (saves all notes with paths) |
+| **H** or **F1** | Toggle help overlay |
+| **Esc** | Quit (saves all notes with paths); cancels title edit / confirm |
 
 On startup, loads every note from `notes/` (up to 8). Uses the same on-disk format as the CLI.
 
@@ -160,21 +175,7 @@ make textbox
 ./textbox_sandbox
 ```
 
-| Input | Action |
-|-------|--------|
-| Type | Insert at cursor |
-| **Enter** | Split line at cursor (`newline`) |
-| **Backspace** at line start | Merge with previous line |
-| **Backspace** / **Delete** | Erase before / at cursor |
-| **Arrow keys** | Move cursor (including across lines) |
-| **Home** / **End** | Start / end of current line |
-| **Esc** or window **X** | Quit |
-
-Rendering uses SDL’s debug bitmap font (`SDL_RenderDebugText`). Body lines outside the panel clip via scroll (`TextboxViewport`). Input: `textbox_apply_key` → silent `note_editor` core.
-
-Phase 2 single-line `textbox_render` was replaced by `textbox_render_panel` for Phase 3.
-
-## Manual test checklist
+## Manual test checklist (CLI)
 
 - [ ] First run with `next_note_id.txt` = `0` creates a note and prompts for title.
 - [ ] `write hello` then `show` — line 1 shows `hello|` (cursor at end).
@@ -192,6 +193,16 @@ Phase 2 single-line `textbox_render` was replaced by `textbox_render_panel` for 
 - [ ] `save` then reopen — body and timestamps persist.
 - [ ] `create` saves the previous note before creating a new one.
 - [ ] `delete` + `y` removes the file; `quit` + `y` saves and exits.
+
+## Manual test checklist (GUI)
+
+- [ ] Startup loads notes from `notes/` (up to 8 panels).
+- [ ] Click panel focuses it; drag title bar moves; grip resizes.
+- [ ] Type, Enter, arrows, Backspace merge — same as Phase 3 in focused body.
+- [ ] **F2** renames title; **Ctrl+S** saves; **Ctrl+N** creates new note.
+- [ ] **Ctrl+W** / title-bar **x** closes panel (saves first).
+- [ ] **Ctrl+Shift+W** → Y deletes file from disk; N/Esc cancels.
+- [ ] **H** / **F1** help overlay; **Esc** quits and saves all notes with paths.
 
 ## Limitations
 

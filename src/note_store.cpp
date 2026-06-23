@@ -354,3 +354,12 @@ bool rename_current_note(sticky_note& sn, const std::string& new_title) {
     std::cout << "Renamed note to \"" << sn.title << "\".\n";
     return true;
 }
+
+bool delete_note_file(const std::string& path) {
+    if (path.empty()) {
+	return false;
+    }
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+    return !ec;
+}
