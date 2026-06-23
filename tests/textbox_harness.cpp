@@ -461,6 +461,62 @@ void scenario_title_edit_blocks_body_keys() {
     check(sticky_gui_focused_note(gui).title == "Title ModeZ", "title edit appends to title buffer");
 }
 
+void scenario_theme_cycle() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(50, "Theme", ""), 40.0f, 40.0f);
+
+    bool quit = false;
+    gui_event(gui, sdl_test::ctrl(SDL_SCANCODE_T), quit);
+    check(gui.theme_id == GuiThemeId::Retro, "ctrl+t cycles to retro theme");
+
+    gui_event(gui, sdl_test::ctrl(SDL_SCANCODE_3), quit);
+    check(gui.theme_id == GuiThemeId::Cyberpunk, "ctrl+3 sets cyberpunk theme");
+}
+
+void scenario_undo_in_gui() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(51, "Undo", ""), 40.0f, 40.0f);
+
+    bool quit = false;
+    gui_type(gui, "a", quit);
+    gui_type(gui, "b", quit);
+    gui_event(gui, sdl_test::ctrl(SDL_SCANCODE_Z), quit);
+    check(sticky_gui_focused_note(gui).text[0] == "a", "ctrl+z undoes last typed char");
+}
+
+void scenario_find_in_gui() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(52, "Find", "needle"), 40.0f, 40.0f);
+
+    bool quit = false;
+    gui_event(gui, sdl_test::ctrl(SDL_SCANCODE_F), quit);
+    check(gui.editing_find, "ctrl+f opens find bar");
+    gui_type(gui, "needle", quit);
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_RETURN), quit);
+    check(gui.find_status == "Match found", "find locates needle in body");
+}
+
+void scenario_open_picker_focuses_existing() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(53, "Open Me", "hi"), 40.0f, 40.0f);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(54, "Other", ""), 200.0f, 200.0f);
+
+    bool quit = false;
+    gui_event(gui, sdl_test::ctrl(SDL_SCANCODE_O), quit);
+    check(gui.show_open_picker, "ctrl+o opens note picker");
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_RETURN), quit);
+    check(sticky_gui_focused_note(gui).title == "Open Me", "open picker focuses existing panel");
+    check(sticky_gui_panel_count(gui) == 2, "open existing does not duplicate panel");
+}
+
 } // namespace
 
 int main() {
@@ -491,6 +547,10 @@ int main() {
     scenario_title_whitespace_trims_to_untitled();
     scenario_f1_toggles_help();
     scenario_title_edit_blocks_body_keys();
+    scenario_theme_cycle();
+    scenario_undo_in_gui();
+    scenario_find_in_gui();
+    scenario_open_picker_focuses_existing();
 
     std::cout << "\nResults: " << passes << " passed, " << failures << " failed\n";
     return failures == 0 ? 0 : 1;

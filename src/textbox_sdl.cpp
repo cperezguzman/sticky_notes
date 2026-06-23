@@ -49,6 +49,21 @@ std::string panel_title(const EditorSession& session) {
     }
     return session.note.title;
 }
+
+void draw_retro_bevel(SDL_Renderer* renderer, const SDL_FRect& rect, bool raised) {
+    const Uint8 hi = raised ? 255 : 64;
+    const Uint8 lo = raised ? 64 : 255;
+    SDL_FRect top{rect.x, rect.y, rect.w, 2.0f};
+    SDL_FRect left{rect.x, rect.y, 2.0f, rect.h};
+    SDL_FRect bottom{rect.x, rect.y + rect.h - 2.0f, rect.w, 2.0f};
+    SDL_FRect right{rect.x + rect.w - 2.0f, rect.y, 2.0f, rect.h};
+    SDL_SetRenderDrawColor(renderer, hi, hi, hi, 255);
+    SDL_RenderFillRect(renderer, &top);
+    SDL_RenderFillRect(renderer, &left);
+    SDL_SetRenderDrawColor(renderer, lo, lo, lo, 255);
+    SDL_RenderFillRect(renderer, &bottom);
+    SDL_RenderFillRect(renderer, &right);
+}
 } // namespace
 
 float sticky_panel_title_bar_height() {
@@ -103,23 +118,22 @@ bool textbox_handle_sdl_event(EditorSession& session, const SDL_Event& event, bo
 
 void textbox_render_panel(SDL_Renderer* renderer, float x, float y, float width, float height,
 			  const EditorSession& session, TextboxViewport& viewport, bool focused,
-			  const PanelChrome& chrome) {
+			  const PanelChrome& chrome, const StickyGuiTheme& theme) {
     SDL_FRect panel{x, y, width, height};
-    SDL_SetRenderDrawColor(renderer, 50, 48, 42, 255);
+    gui_set_render_color(renderer, theme.panel_fill);
     SDL_RenderFillRect(renderer, &panel);
-    if (focused) {
-	SDL_SetRenderDrawColor(renderer, 255, 220, 80, 255);
-    } else {
-	SDL_SetRenderDrawColor(renderer, 100, 95, 85, 255);
-    }
+    gui_set_render_color(renderer, focused ? theme.panel_border_focus : theme.panel_border);
     SDL_RenderRect(renderer, &panel);
+    if (theme.retro_bevel) {
+	draw_retro_bevel(renderer, panel, true);
+    }
 
     const float title_bar_h = kLineH + 2.0f * kPadding;
     SDL_FRect title_bar{x, y, width, title_bar_h};
-    SDL_SetRenderDrawColor(renderer, 70, 65, 55, 255);
+    gui_set_render_color(renderer, theme.title_bar);
     SDL_RenderFillRect(renderer, &title_bar);
 
-    SDL_SetRenderDrawColor(renderer, 255, 248, 220, 255);
+    gui_set_render_color(renderer, theme.title_text);
     const char* title = chrome.title_text != nullptr ? chrome.title_text : panel_title(session).c_str();
     SDL_RenderDebugText(renderer, x + kPadding, y + kPadding, title);
 
@@ -127,29 +141,29 @@ void textbox_render_panel(SDL_Renderer* renderer, float x, float y, float width,
 	const float btn_w = sticky_panel_close_button_width();
 	const float btn_x = x + width - btn_w - kPadding * 0.5f;
 	SDL_FRect close_btn{btn_x, y + kPadding * 0.5f, btn_w, kLineH};
-	SDL_SetRenderDrawColor(renderer, 120, 50, 50, 255);
+	gui_set_render_color(renderer, theme.close_btn);
 	SDL_RenderFillRect(renderer, &close_btn);
-	SDL_SetRenderDrawColor(renderer, 255, 200, 200, 255);
+	gui_set_render_color(renderer, theme.close_text);
 	SDL_RenderDebugText(renderer, btn_x + 4.0f, y + kPadding, "x");
     }
 
     if (chrome.title_caret_visible) {
 	const float caret_x = x + kPadding + static_cast<float>(chrome.title_caret_col) * kCharW;
 	SDL_FRect title_caret{caret_x, y + kPadding, 2.0f, kLineH};
-	SDL_SetRenderDrawColor(renderer, 255, 220, 80, 255);
+	gui_set_render_color(renderer, theme.caret);
 	SDL_RenderFillRect(renderer, &title_caret);
     }
 
     const float body_y = y + title_bar_h;
     const float body_h = height - title_bar_h;
     SDL_FRect body{x, body_y, width, body_h};
-    SDL_SetRenderDrawColor(renderer, 40, 40, 40, 255);
+    gui_set_render_color(renderer, theme.body);
     SDL_RenderFillRect(renderer, &body);
 
     const std::size_t visible = visible_body_lines(body_h);
     textbox_scroll_to_cursor(viewport, session, visible);
 
-    SDL_SetRenderDrawColor(renderer, 230, 230, 230, 255);
+    gui_set_render_color(renderer, theme.body_text);
     const std::size_t line_count = textbox_line_count(session);
     const std::size_t first = viewport.first_visible_line;
     const std::size_t last = std::min(first + visible, line_count);
@@ -166,14 +180,14 @@ void textbox_render_panel(SDL_Renderer* renderer, float x, float y, float width,
 	const float caret_y = body_y + kPadding + row * kLineH;
 	const float caret_x = x + kPadding + static_cast<float>(textbox_cursor_column(session)) * kCharW;
 	SDL_FRect caret{caret_x, caret_y, 2.0f, kLineH};
-	SDL_SetRenderDrawColor(renderer, 255, 220, 80, 255);
+	gui_set_render_color(renderer, theme.caret);
 	SDL_RenderFillRect(renderer, &caret);
     }
 
     if (focused) {
 	const float grip = 10.0f;
-	SDL_FRect resize_grip{width - grip, y + height - grip, grip, grip};
-	SDL_SetRenderDrawColor(renderer, 180, 170, 150, 255);
+	SDL_FRect resize_grip{x + width - grip, y + height - grip, grip, grip};
+	gui_set_render_color(renderer, theme.grip);
 	SDL_RenderFillRect(renderer, &resize_grip);
     }
 }

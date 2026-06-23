@@ -1,5 +1,6 @@
 #pragma once
 
+#include "gui_theme.h"
 #include "note_editor.h"
 #include "textbox_input.h"
 
@@ -22,4 +23,4 @@ struct PanelChrome {
 
 void textbox_render_panel(SDL_Renderer* renderer, float x, float y, float width, float height,
 			  const EditorSession& session, TextboxViewport& viewport, bool focused,
-			  const PanelChrome& chrome = {});
+			  const PanelChrome& chrome, const StickyGuiTheme& theme);

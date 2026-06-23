@@ -94,7 +94,8 @@ src/
   note_file_codec.*  — on-disk note file format (`ParsedNoteFile`)
   sticky_note.cpp/.h — `sticky_note` struct; timestamps
   textbox_input.*    — platform-neutral multiline key seam (Phase 2–3)
-  textbox_sdl.*      — SDL3 adapter + panel render
+  textbox_sdl.*      — SDL3 adapter + themed panel render
+  gui_theme.*        — desk/panel color themes (Minimal, Retro, Cyberpunk)
   sticky_gui.*       — Phase 4: multiple panels, drag, resize, load/save
 sandbox/
   textbox_main.cpp   — Phase 2 SDL3 window loop
@@ -145,7 +146,7 @@ Runs `tests/manual_smoke.sh` — **30 automated checks** that pipe commands into
 
 ### GUI smoke — `make textbox-smoke`
 
-Builds `textbox_test_harness` and runs `tests/textbox_smoke.sh` — **52 headless scenarios** that drive `sticky_gui_handle_event()` with synthetic SDL keyboard and mouse events. Covers the **Manual test checklist (GUI)** below (except visual polish). Each scenario uses an isolated temp `notes/` directory.
+Builds `textbox_test_harness` and runs `tests/textbox_smoke.sh` — **60 headless scenarios** that drive `sticky_gui_handle_event()` with synthetic SDL keyboard and mouse events. Covers the **Manual test checklist (GUI)** below (except visual polish). Each scenario uses an isolated temp `notes/` directory.
 
 | Scenario group | Examples |
 |----------------|----------|
@@ -156,6 +157,8 @@ Builds `textbox_test_harness` and runs `tests/textbox_smoke.sh` — **52 headles
 | **Delete file** | Ctrl+Shift+W → Y removes file (no resurrection on re-init); N/Esc cancel |
 | **Title** | F2 rename + persist; Esc cancel; whitespace → `Untitled` |
 | **Modals** | H/F1 help blocks typing; delete confirm blocks stray keys |
+| **Open / find / undo** | Ctrl+O picker; Ctrl+F find; Ctrl+Z/Y undo/redo; F3 find next |
+| **Themes** | Ctrl+T cycle; Ctrl+1/2/3 preset themes |
 | **Create** | Ctrl+N + save creates `notes/note_<id>.txt` |
 | **Mouse** | Drag title bar, resize grip |
 | **Quit path** | `sticky_gui_save_all`, Esc sets quit |
@@ -202,14 +205,30 @@ Rendering uses SDL’s debug bitmap font (`SDL_RenderDebugText`). Body lines out
 | **Drag title bar** | Move panel |
 | **Drag bottom-right grip** | Resize focused panel |
 | **F2** | Rename note title |
+| **Ctrl+O** | Open note picker (loads from `notes/` or focuses open panel) |
+| **Ctrl+S** | Save focused note (shows **Saved** toast) |
+| **Ctrl+Z** / **Ctrl+Y** | Undo / redo body edit |
+| **Ctrl+F** | Find bar — type needle, **Enter** to search |
+| **F3** | Find next match |
 | **Ctrl+N** | New note (saved to `notes/`) |
 | **Ctrl+W** | Close focused panel (saves first) |
 | **Ctrl+Shift+W** | Delete note file from disk (Y/N confirm) |
-| **Ctrl+S** | Save focused note |
+| **Ctrl+T** | Cycle theme: Minimal → Retro → Cyberpunk |
+| **Ctrl+1** / **Ctrl+2** / **Ctrl+3** | Jump to Minimal / Retro / Cyberpunk |
 | **H** or **F1** | Toggle help overlay |
 | **Esc** | Quit (saves all notes with paths); cancels title edit / confirm |
 
 On startup, loads every note from `notes/` (up to 8). Uses the same on-disk format as the CLI.
+
+### Themes
+
+| Theme | Look |
+|-------|------|
+| **Minimal** (default) | Dark charcoal desk, warm gold focus — current portfolio aesthetic |
+| **Retro** | Win95-style grey desktop, navy title bars, white body, beveled edges |
+| **Cyberpunk** | Black desk, matrix-green text, magenta caret, neon borders |
+
+Switch with **Ctrl+T** or **Ctrl+1/2/3**. Theme badge shown top-left.
 
 **One-time:** build SDL3 into `third_party/` (gitignored):
 
@@ -252,7 +271,10 @@ Automated by `make textbox-smoke` (52 headless checks). Run `./textbox_sandbox` 
 - [ ] Startup loads notes from `notes/` (up to 8 panels).
 - [ ] Click panel focuses it; drag title bar moves; grip resizes.
 - [ ] Type, Enter, arrows, Backspace merge — same as Phase 3 in focused body.
-- [ ] **F2** renames title; **Ctrl+S** saves; **Ctrl+N** creates new note.
+- [ ] **Ctrl+O** opens note picker; selecting open note focuses it without duplicate.
+- [ ] **Ctrl+S** saves and shows toast; **Ctrl+Z/Y** undo/redo in body.
+- [ ] **Ctrl+F** + **Enter** finds text; **F3** find next.
+- [ ] **Ctrl+T** and **Ctrl+1/2/3** switch Minimal / Retro / Cyberpunk themes.
 - [ ] **Ctrl+W** / title-bar **x** closes panel (saves first).
 - [ ] **Ctrl+Shift+W** → Y deletes file from disk; N/Esc cancels.
 - [ ] **H** / **F1** help overlay; **Esc** quits and saves all notes with paths.

@@ -41,7 +41,8 @@ int main(int argc, char* argv[]) {
 	    sticky_gui_handle_event(gui, event, quit_requested);
 	}
 
-	SDL_SetRenderDrawColor(renderer, 28, 28, 32, 255);
+	SDL_SetRenderDrawColor(renderer, sticky_gui_desk_color(gui).r, sticky_gui_desk_color(gui).g,
+			       sticky_gui_desk_color(gui).b, sticky_gui_desk_color(gui).a);
 	SDL_RenderClear(renderer);
 
 	sticky_gui_render(renderer, gui);

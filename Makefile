@@ -9,13 +9,16 @@ SRCS     = src/main.cpp src/parser.cpp src/note_file_codec.cpp src/sticky_note.c
 HEADERS  = src/sticky_note.h src/parser.h src/note_file_codec.h src/note_store.h src/note_editor.h src/note_editor_cli.h src/textbox_input.h
 
 TEST_SRCS = tests/test_main.cpp src/parser.cpp src/note_file_codec.cpp src/sticky_note.cpp \
-	src/note_editor.cpp src/note_store.cpp src/textbox_input.cpp src/sticky_gui.cpp src/textbox_sdl.cpp
+	src/note_editor.cpp src/note_store.cpp src/textbox_input.cpp src/sticky_gui.cpp \
+	src/textbox_sdl.cpp src/gui_theme.cpp
 
 HARNESS_SRCS = tests/textbox_harness.cpp src/sticky_gui.cpp src/textbox_input.cpp src/textbox_sdl.cpp \
-	src/note_editor.cpp src/sticky_note.cpp src/note_store.cpp src/note_file_codec.cpp src/parser.cpp
+	src/gui_theme.cpp src/note_editor.cpp src/sticky_note.cpp src/note_store.cpp \
+	src/note_file_codec.cpp src/parser.cpp
 
 TEXTBOX_SRCS = sandbox/textbox_main.cpp src/sticky_gui.cpp src/textbox_input.cpp src/textbox_sdl.cpp \
-	src/note_editor.cpp src/sticky_note.cpp src/note_store.cpp src/note_file_codec.cpp src/parser.cpp
+	src/gui_theme.cpp src/note_editor.cpp src/sticky_note.cpp src/note_store.cpp \
+	src/note_file_codec.cpp src/parser.cpp
 
 .PHONY: all clean test smoke textbox textbox-smoke sdl3
 

@@ -1,6 +1,8 @@
 #pragma once
 
+#include "gui_theme.h"
 #include "note_editor.h"
+#include "note_store.h"
 #include "textbox_input.h"
 
 #include <SDL3/SDL.h>
@@ -18,6 +20,12 @@ struct StickyPanel {
     TextboxViewport viewport{};
 };
 
+struct OpenPickerEntry {
+    int id = 0;
+    std::string title;
+    std::string path;
+};
+
 struct StickyGui {
     std::vector<StickyPanel> panels;
     std::size_t focused = 0;
@@ -27,6 +35,8 @@ struct StickyGui {
     float drag_offset_x = 0.0f;
     float drag_offset_y = 0.0f;
 
+    GuiThemeId theme_id = GuiThemeId::Minimal;
+
     bool show_help = false;
     bool editing_title = false;
     std::string title_edit_buffer;
@@ -34,6 +44,17 @@ struct StickyGui {
 
     bool pending_delete = false;
     std::size_t pending_delete_panel = 0;
+
+    bool show_open_picker = false;
+    std::vector<OpenPickerEntry> open_picker_entries;
+    std::size_t open_picker_cursor = 0;
+
+    bool editing_find = false;
+    std::string find_buffer;
+    std::size_t find_cursor = 0;
+    std::string find_status;
+
+    Uint32 save_toast_until_ms = 0;
 };
 
 void sticky_gui_init(StickyGui& gui);
@@ -43,6 +64,10 @@ void sticky_gui_save_all(const StickyGui& gui);
 void sticky_gui_render(SDL_Renderer* renderer, StickyGui& gui);
 
 bool sticky_gui_handle_event(StickyGui& gui, const SDL_Event& event, bool& quit_requested);
+
+StickyGuiTheme sticky_gui_active_theme(const StickyGui& gui);
+
+GuiColor sticky_gui_desk_color(const StickyGui& gui);
 
 // Test / harness helpers (no SDL init required for event simulation).
 void sticky_gui_reset(StickyGui& gui);
@@ -67,3 +92,5 @@ struct StickyPanelHitTargets {
 };
 
 void sticky_gui_panel_hit_targets(const StickyPanel& panel, StickyPanelHitTargets& out);
+
+bool sticky_gui_modal_blocks_body(const StickyGui& gui);
