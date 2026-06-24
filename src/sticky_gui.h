@@ -46,6 +46,9 @@ struct StickyGui {
 
     GuiThemeId theme_id = GuiThemeId::Minimal;
 
+    bool show_theme_picker = false;
+    std::size_t theme_picker_cursor = 0;
+
     bool show_help = false;
     bool editing_title = false;
     std::string title_edit_buffer;

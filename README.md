@@ -35,6 +35,16 @@ From the repository root (so `notes/next_note_id.txt` and `notes/note_*.txt` are
 
 **Later runs:** you can **open** an existing note (by **exact title** or **numeric id** from `list`) or **create** a new one.
 
+## Project status
+
+This project is currently in a good **portfolio-pause** state: the CLI is complete, the SDL desk GUI is usable, pop-out windows work, and the app has both automated tests and a desktop launcher path on Linux.
+
+If you come back later, start with:
+
+1. `README.md` for run/build commands and current shortcuts
+2. `docs/portfolio/sticky-notes/dev-log.md` for the latest session snapshot
+3. `docs/portfolio/sticky-notes/future-features.md` for backlog / resume ideas
+
 ## Commands
 
 | Command | Description |
@@ -103,10 +113,14 @@ src/
 sandbox/
   textbox_main.cpp   — multi-window SDL loop (desk + floating pop-outs)
 scripts/
-  build-sdl3.sh      — vendored SDL3 install (local, gitignored)
+  build-sdl3.sh           — vendored SDL3 install (local, gitignored)
+  run-sticky-notes-gui.sh — launch GUI from repo root (builds if needed)
+  install-desktop.sh      — install ~/.local/share/applications entry
+assets/
+  sticky-notes.png        — launcher icon
 tests/
   test_main.cpp         — unit tests (CLI, editor, codec, GUI logic)
-  textbox_harness.cpp   — Phase 4 integration harness (77 headless scenarios)
+  textbox_harness.cpp   — Phase 4 integration harness (83 headless checks)
   textbox_smoke.sh      — runs harness; mirrors manual_smoke.sh for GUI
   sdl_event_helpers.h   — synthetic SDL key/mouse events for tests
   test_notes_dir.h      — isolated temp notes/ per test scenario
@@ -115,7 +129,7 @@ notes/               — local data (gitignored; auto-created on first run)
 Makefile
 ```
 
-Build targets: `sticky_notes` (CLI), `test_runner`, `textbox_test_harness`, `textbox_sandbox` (GUI).
+Build targets: `sticky_notes` (CLI), `test_runner`, `textbox_test_harness`, `textbox_sandbox` (GUI), `gui` (alias), `desktop` (Linux launcher install).
 
 ## Tests
 
@@ -150,7 +164,7 @@ Runs `tests/manual_smoke.sh` — **30 automated checks** that pipe commands into
 
 ### GUI smoke — `make textbox-smoke`
 
-Builds `textbox_test_harness` and runs `tests/textbox_smoke.sh` — **77 headless scenarios** that drive `sticky_gui_handle_event()` with synthetic SDL keyboard and mouse events. Covers the **Manual test checklist (GUI)** below (except visual polish and pop-out windows, which need a display). Each scenario uses an isolated temp `notes/` directory.
+Builds `textbox_test_harness` and runs `tests/textbox_smoke.sh` — **83 headless checks** that drive `sticky_gui_handle_event()` with synthetic SDL keyboard and mouse events. Covers the **Manual test checklist (GUI)** below (except visual polish and pop-out windows, which need a display). Each scenario uses an isolated temp `notes/` directory.
 
 | Scenario group | Examples |
 |----------------|----------|
@@ -179,6 +193,20 @@ make textbox
 ```
 
 Requires a display. Not run by `make smoke` or `make textbox-smoke`.
+
+### Desktop shortcut (Linux)
+
+Install a launcher in your app menu (no `sudo`):
+
+```bash
+make desktop
+```
+
+Then search for **Sticky Notes** in your desktop environment’s application menu. The launcher runs `scripts/run-sticky-notes-gui.sh`, which `cd`s to the project root (so `notes/` resolves correctly) and builds the GUI on first launch if needed.
+
+You can also pin the installed entry to your dock/taskbar, or run `./scripts/run-sticky-notes-gui.sh` directly.
+
+If you move the repo later, rerun `make desktop` so the launcher paths point at the new location.
 
 ## Phase 2 — SDL3 textbox sandbox
 
@@ -223,6 +251,7 @@ Rendering uses SDL’s debug bitmap font (`SDL_RenderDebugText`). Body lines out
 | **Ctrl+Shift+W** | Delete note file from disk (Y/N confirm) |
 | **Ctrl+T** | Cycle theme: Minimal → Retro → Cyberpunk |
 | **Ctrl+1** / **Ctrl+2** / **Ctrl+3** | Jump to Minimal / Retro / Cyberpunk |
+| **Click Theme badge** | Open theme dropdown (Minimal / Retro / Cyberpunk) |
 | **Ctrl+B** | Toggle notes sidebar |
 | **Sidebar click** | Show that note on the desk (replaces current desk note) |
 | **Sidebar drag** | Pop note out to a floating window |
@@ -239,7 +268,7 @@ Rendering uses SDL’s debug bitmap font (`SDL_RenderDebugText`). Body lines out
 | **x** / window close | Save and close pop-out only (desk keeps running) |
 | **Esc** | Does **not** quit the app (desk still open) |
 
-On startup, opens **one note** on the desk (last saved desk note, or most recently edited on disk). All other notes appear in the **sidebar** (sorted by last edited). **Desk state** persists in `notes/desk_state.txt`. Uses the same on-disk format as the CLI. **Theme choice** persists in `notes/gui_theme.txt` across restarts. Body text **wraps** to panel width; narrowing then widening a panel reflows soft-wrapped lines (manual **Enter** still creates hard line breaks).
+On startup, opens **one note** on the desk (last saved desk note, or most recently edited on disk). All other notes appear in the **sidebar** (sorted by last edited). **Desk state** persists in `notes/desk_state.txt`. Uses the same on-disk format as the CLI. **Theme choice** persists in `notes/gui_theme.txt` across restarts. The desk note expands to fill most of the desk area; pop-out windows use a smaller floating size. Body text **wraps** to panel width; narrowing then widening a panel reflows soft-wrapped lines (manual **Enter** still creates hard line breaks).
 
 ### Notes sidebar
 
@@ -256,7 +285,7 @@ On startup, opens **one note** on the desk (last saved desk note, or most recent
 | **Retro** | Win95-style grey desktop, navy title bars, white body, beveled edges |
 | **Cyberpunk** | Black desk, matrix-green text, magenta caret, neon borders |
 
-Switch with **Ctrl+T** or **Ctrl+1/2/3**. Theme badge shown top-left. Last choice is saved to `notes/gui_theme.txt` and restored on next launch.
+Switch with **Ctrl+T** or **Ctrl+1/2/3**. Theme badge sits at the **bottom of the sidebar** and hides when the sidebar is collapsed. Last choice is saved to `notes/gui_theme.txt` and restored on next launch.
 
 **One-time:** build SDL3 into `third_party/` (gitignored):
 
@@ -294,10 +323,11 @@ Automated by `make smoke` (30 checks). Backs up and restores your `notes/` direc
 
 ## Manual test checklist (GUI)
 
-Automated by `make textbox-smoke` (77 headless checks). Run `./textbox_sandbox` on your display for visual verification, sidebar drag, and pop-out windows.
+Automated by `make textbox-smoke` (83 headless checks). Run `./textbox_sandbox` on your display for visual verification, sidebar drag, and pop-out windows.
 
 - [ ] Startup shows **one** note on desk; others listed in sidebar.
 - [ ] **Ctrl+B** toggles sidebar; **<** / **>** tab works.
+- [ ] Theme badge at the **bottom of the sidebar** opens/closes the dropdown; click a row to apply theme.
 - [ ] **Click** sidebar row swaps desk note; highlight follows.
 - [ ] **Drag** sidebar row pops note out to floating window.
 - [ ] **Hover** over a panel focuses it without clicking.
@@ -307,6 +337,7 @@ Automated by `make textbox-smoke` (77 headless checks). Run `./textbox_sandbox` 
 - [ ] **Ctrl+S** saves and shows toast; **Ctrl+Z/Y** undo/redo in body.
 - [ ] **Ctrl+F** + **Enter** finds text; **F3** find next.
 - [ ] **Ctrl+T** and **Ctrl+1/2/3** switch themes; restart app — **theme persists**.
+- [ ] Desk note uses most of the main window; popped-out note reopens in compact floating size.
 - [ ] **Double-click title** or **Ctrl+Shift+P** pops note to always-on-top window.
 - [ ] Pop-out: drag title moves window; **v** or double-click title **docks** back; **x** closes pop-out only.
 - [ ] **Ctrl+W** / title-bar **x** closes desk panel (saves first).

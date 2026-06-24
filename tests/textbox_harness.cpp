@@ -135,6 +135,35 @@ void scenario_sidebar_toggle() {
     check(sticky_gui_sidebar_visible(gui), "Ctrl+B shows sidebar again");
 }
 
+void scenario_theme_badge_dropdown() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_init(gui);
+    check(gui.theme_id == GuiThemeId::Minimal, "starts on minimal theme");
+
+    bool quit = false;
+    // Theme badge sits at the bottom of the sidebar (220px wide, 640px tall window).
+    constexpr float kThemeBadgeX = 110.0f;
+    constexpr float kThemeBadgeY = 618.0f;
+    constexpr float kRetroRowY = 576.0f;
+
+    gui_event(gui, sdl_test::mouse_button_down(kThemeBadgeX, kThemeBadgeY), quit);
+    gui_event(gui, sdl_test::mouse_button_up(kThemeBadgeX, kThemeBadgeY), quit);
+    check(gui.show_theme_picker, "click theme badge opens dropdown");
+
+    gui_event(gui, sdl_test::mouse_button_down(kThemeBadgeX, kRetroRowY), quit);
+    gui_event(gui, sdl_test::mouse_button_up(kThemeBadgeX, kRetroRowY), quit);
+    check(!gui.show_theme_picker, "click retro row applies and closes dropdown");
+    check(gui.theme_id == GuiThemeId::Retro, "retro selected from dropdown");
+
+    gui_event(gui, sdl_test::mouse_button_down(kThemeBadgeX, kThemeBadgeY), quit);
+    gui_event(gui, sdl_test::mouse_button_up(kThemeBadgeX, kThemeBadgeY), quit);
+    check(gui.show_theme_picker, "badge click reopens dropdown");
+    gui_event(gui, sdl_test::mouse_button_down(kThemeBadgeX, kThemeBadgeY), quit);
+    gui_event(gui, sdl_test::mouse_button_up(kThemeBadgeX, kThemeBadgeY), quit);
+    check(!gui.show_theme_picker, "badge click again closes dropdown");
+}
+
 void scenario_hover_focuses_panel() {
     test_notes::TempNotesDir dir;
     StickyGui gui{};
@@ -617,6 +646,7 @@ int main() {
     scenario_init_caps_at_eight_notes();
     scenario_init_spreads_panels_on_grid();
     scenario_sidebar_toggle();
+    scenario_theme_badge_dropdown();
     scenario_focus_panel_by_click();
     scenario_body_typing_and_save();
     scenario_multiline_body_via_enter();

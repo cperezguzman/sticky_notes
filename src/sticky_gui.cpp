@@ -24,6 +24,7 @@ constexpr std::size_t kMaxFindLen = 64;
 constexpr Uint32 kSaveToastMs = 1800;
 constexpr Uint32 kTitleDoubleClickMs = 400;
 constexpr float kDefaultDeskW = 960.0f;
+constexpr float kDefaultDeskH = 640.0f;
 constexpr float kSidebarWidth = 220.0f;
 constexpr float kSidebarTabWidth = 22.0f;
 constexpr float kSidebarRowH = 18.0f;
@@ -34,7 +35,10 @@ constexpr const char* kDeskStatePath = "notes/desk_state.txt";
 
 // Matches sandbox window (textbox_main.cpp); used for startup grid layout.
 constexpr float kDeskMargin = 28.0f;
-constexpr float kGridPanelH = 180.0f;
+constexpr float kPopOutPanelW = 280.0f;
+constexpr float kPopOutPanelH = 180.0f;
+constexpr float kThemeBadgeH = 28.0f;
+constexpr std::size_t kThemePickerCount = static_cast<std::size_t>(GuiThemeId::Count);
 
 bool point_in_rect(float px, float py, float x, float y, float w, float h) {
     return px >= x && px < x + w && py >= y && py < y + h;
@@ -45,6 +49,13 @@ void close_panel_at(StickyGui& gui, std::size_t index, bool save);
 void add_panel(StickyGui& gui, StickyPanel panel);
 void focus_panel(StickyGui& gui, std::size_t index);
 bool extract_panel_at(StickyGui& gui, std::size_t index, StickyPanel& out);
+void cancel_theme_picker(StickyGui& gui);
+void render_theme_badge(SDL_Renderer* renderer, const StickyGui& gui, const StickyGuiTheme& theme);
+void render_theme_picker(SDL_Renderer* renderer, const StickyGui& gui, const StickyGuiTheme& theme);
+
+float sidebar_theme_top_y() {
+    return kDefaultDeskH - kSidebarPad - kThemeBadgeH - 4.0f;
+}
 
 bool ctrl_down(const SDL_KeyboardEvent& key) {
     return (key.mod & SDL_KMOD_CTRL) != 0;
@@ -55,10 +66,7 @@ bool shift_down(const SDL_KeyboardEvent& key) {
 }
 
 void close_button_rect(const StickyPanel& panel, float& out_x, float& out_y, float& out_w, float& out_h) {
-    out_w = sticky_panel_close_button_width();
-    out_h = kLineH;
-    out_x = panel.x + panel.width - out_w - kPadding * 0.5f;
-    out_y = panel.y + kPadding * 0.5f;
+    sticky_panel_close_button_rect(panel.x, panel.y, panel.width, out_x, out_y, out_w, out_h);
 }
 
 StickyPanel make_panel_from_note(const sticky_note& note, float x, float y) {
@@ -87,6 +95,36 @@ StickyPanel make_blank_panel(float x, float y) {
 
 float sidebar_occupies_width(const StickyGui& gui) {
     return gui.sidebar_visible ? kSidebarWidth : kSidebarTabWidth;
+}
+
+void desk_content_rect(const StickyGui& gui, float& out_x, float& out_y, float& out_w, float& out_h) {
+    out_x = sidebar_occupies_width(gui) + kDeskMargin;
+    out_y = kDeskMargin;
+    out_w = kDefaultDeskW - out_x - kDeskMargin;
+    out_h = kDefaultDeskH - 2.0f * kDeskMargin;
+}
+
+void size_panel_for_desk(const StickyGui& gui, StickyPanel& panel) {
+    float x = 0.0f;
+    float y = 0.0f;
+    float w = 0.0f;
+    float h = 0.0f;
+    desk_content_rect(gui, x, y, w, h);
+    panel.x = x;
+    panel.y = y;
+    panel.width = std::max(kMinPanelW, w);
+    panel.height = std::max(kMinPanelH, h);
+    textbox_enforce_wrap(panel.session, textbox_body_max_columns(panel.width));
+}
+
+void size_panel_for_pop_out(StickyPanel& panel) {
+    panel.width = kPopOutPanelW;
+    panel.height = kPopOutPanelH;
+    textbox_enforce_wrap(panel.session, textbox_body_max_columns(panel.width));
+}
+
+void place_panel_on_desk(const StickyGui& gui, StickyPanel& panel) {
+    size_panel_for_desk(gui, panel);
 }
 
 void desk_state_save(const StickyGui& gui) {
@@ -170,13 +208,6 @@ void refresh_sidebar_entries(StickyGui& gui) {
     }
 }
 
-void place_panel_on_desk(const StickyGui& gui, StickyPanel& panel) {
-    const float content_x = sidebar_occupies_width(gui);
-    const float content_w = kDefaultDeskW - content_x - kDeskMargin;
-    panel.x = content_x + std::max(kDeskMargin, (content_w - panel.width) * 0.5f);
-    panel.y = kDeskMargin + 36.0f;
-}
-
 void clear_desk_panels(StickyGui& gui, bool save) {
     while (!gui.panels.empty()) {
 	close_panel_at(gui, 0, save);
@@ -199,7 +230,6 @@ bool load_desk_panel_from_path(StickyGui& gui, const std::string& path) {
 	return false;
     }
     StickyPanel panel = make_panel_from_note(note, 0.0f, 0.0f);
-    panel.height = kGridPanelH;
     set_desk_panel(gui, std::move(panel));
     return true;
 }
@@ -215,7 +245,7 @@ void begin_sidebar_pop_out(StickyGui& gui, const SidebarEntry& entry, SDL_Window
 	    return;
 	}
 	gui.sidebar_pop_out_panel = make_panel_from_note(note, 0.0f, 0.0f);
-	gui.sidebar_pop_out_panel.height = kGridPanelH;
+	size_panel_for_pop_out(gui.sidebar_pop_out_panel);
     }
 
     int desk_x = 0;
@@ -254,8 +284,10 @@ bool sidebar_row_rect(const StickyGui& gui, std::size_t index, float& out_x, flo
 	return false;
     }
     const std::size_t visible_index = index - gui.sidebar_scroll;
-    constexpr std::size_t kMaxVisibleRows = 28;
-    if (visible_index >= kMaxVisibleRows) {
+    const float theme_top = sidebar_theme_top_y();
+    const std::size_t max_visible_rows =
+	static_cast<std::size_t>((theme_top - kSidebarHeaderH) / kSidebarRowH);
+    if (visible_index >= max_visible_rows) {
 	return false;
     }
     out_x = kSidebarPad;
@@ -266,7 +298,8 @@ bool sidebar_row_rect(const StickyGui& gui, std::size_t index, float& out_x, flo
 }
 
 int sidebar_row_at_point(const StickyGui& gui, float px, float py) {
-    if (!gui.sidebar_visible || px < 0.0f || px >= kSidebarWidth || py < kSidebarHeaderH) {
+    if (!gui.sidebar_visible || px < 0.0f || px >= kSidebarWidth || py < kSidebarHeaderH
+	|| py >= sidebar_theme_top_y()) {
 	return -1;
     }
     const std::size_t visible_row = static_cast<std::size_t>((py - kSidebarHeaderH) / kSidebarRowH);
@@ -289,6 +322,9 @@ int sidebar_row_at_point(const StickyGui& gui, float px, float py) {
 
 void toggle_sidebar(StickyGui& gui) {
     gui.sidebar_visible = !gui.sidebar_visible;
+    if (!gui.sidebar_visible) {
+	cancel_theme_picker(gui);
+    }
     if (!gui.panels.empty()) {
 	place_panel_on_desk(gui, gui.panels[gui.focused]);
     }
@@ -364,7 +400,7 @@ bool handle_sidebar_mouse(StickyGui& gui, const SDL_Event& event, SDL_Window* de
 
 void render_sidebar(SDL_Renderer* renderer, StickyGui& gui, const StickyGuiTheme& theme) {
     if (gui.sidebar_visible) {
-	SDL_FRect panel{0.0f, 0.0f, kSidebarWidth, 640.0f};
+	SDL_FRect panel{0.0f, 0.0f, kSidebarWidth, kDefaultDeskH};
 	gui_set_render_color(renderer, theme.overlay_bg);
 	SDL_RenderFillRect(renderer, &panel);
 	gui_set_render_color(renderer, theme.overlay_border);
@@ -374,8 +410,11 @@ void render_sidebar(SDL_Renderer* renderer, StickyGui& gui, const StickyGuiTheme
 	SDL_RenderDebugText(renderer, kSidebarPad, kSidebarPad, "Notes");
 
 	float row_y = kSidebarHeaderH;
+	const float theme_top = sidebar_theme_top_y();
+	const std::size_t max_visible_rows =
+	    static_cast<std::size_t>((theme_top - kSidebarHeaderH) / kSidebarRowH);
 	const std::size_t max_row = std::min(gui.sidebar_entries.size(),
-					     gui.sidebar_scroll + static_cast<std::size_t>(28));
+					     gui.sidebar_scroll + max_visible_rows);
 	for (std::size_t i = gui.sidebar_scroll; i < max_row; ++i) {
 	    const SidebarEntry& entry = gui.sidebar_entries[i];
 	    if (entry.on_desk) {
@@ -395,6 +434,11 @@ void render_sidebar(SDL_Renderer* renderer, StickyGui& gui, const StickyGuiTheme
 	if (gui.sidebar_entries.empty()) {
 	    gui_set_render_color(renderer, theme.overlay_muted);
 	    SDL_RenderDebugText(renderer, kSidebarPad, kSidebarHeaderH, "(no notes)");
+	}
+
+	render_theme_badge(renderer, gui, theme);
+	if (gui.show_theme_picker) {
+	    render_theme_picker(renderer, gui, theme);
 	}
     }
 
@@ -571,7 +615,6 @@ void open_picker_selection(StickyGui& gui) {
 	return;
     }
     StickyPanel panel = make_panel_from_note(note, 0.0f, 0.0f);
-    panel.height = kGridPanelH;
     set_desk_panel(gui, std::move(panel));
     cancel_open_picker(gui);
 }
@@ -824,6 +867,204 @@ void set_theme(StickyGui& gui, GuiThemeId id) {
     gui_theme_save_persisted(id);
 }
 
+void theme_badge_rect(const StickyGui& gui, float& out_x, float& out_y, float& out_w, float& out_h) {
+    if (!gui.sidebar_visible) {
+	out_x = 0.0f;
+	out_y = 0.0f;
+	out_w = 0.0f;
+	out_h = 0.0f;
+	return;
+    }
+    out_x = kSidebarPad;
+    out_y = kDefaultDeskH - kThemeBadgeH - kSidebarPad;
+    out_w = kSidebarWidth - 2.0f * kSidebarPad;
+    out_h = kThemeBadgeH;
+}
+
+void theme_dropdown_rect(const StickyGui& gui, float& out_x, float& out_y, float& out_w, float& out_h) {
+    float badge_y = 0.0f;
+    float badge_h = 0.0f;
+    theme_badge_rect(gui, out_x, badge_y, out_w, badge_h);
+    if (out_w <= 0.0f) {
+	out_y = 0.0f;
+	out_h = 0.0f;
+	return;
+    }
+    // Opens upward from the badge; must match render_theme_picker.
+    const float drop_h = kLineH + 4.0f + static_cast<float>(kThemePickerCount) * (kLineH + 4.0f)
+			 + 8.0f;
+    out_y = badge_y - drop_h;
+    out_h = drop_h;
+}
+
+int theme_picker_row_at_point(const StickyGui& gui, float mx, float my) {
+    float drop_x = 0.0f;
+    float drop_y = 0.0f;
+    float drop_w = 0.0f;
+    float drop_h = 0.0f;
+    theme_dropdown_rect(gui, drop_x, drop_y, drop_w, drop_h);
+    if (!point_in_rect(mx, my, drop_x, drop_y, drop_w, drop_h)) {
+	return -1;
+    }
+
+    float row_y = drop_y + 4.0f + kLineH;
+    for (std::size_t i = 0; i < kThemePickerCount; ++i) {
+	const float row_h = kLineH + 4.0f;
+	if (my >= row_y - 2.0f && my < row_y + row_h) {
+	    return static_cast<int>(i);
+	}
+	row_y += row_h;
+    }
+    return -1;
+}
+
+bool theme_picker_point_in_dropdown(const StickyGui& gui, float mx, float my) {
+    float drop_x = 0.0f;
+    float drop_y = 0.0f;
+    float drop_w = 0.0f;
+    float drop_h = 0.0f;
+    theme_dropdown_rect(gui, drop_x, drop_y, drop_w, drop_h);
+    return point_in_rect(mx, my, drop_x, drop_y, drop_w, drop_h);
+}
+
+void cancel_theme_picker(StickyGui& gui) {
+    gui.show_theme_picker = false;
+}
+
+void begin_theme_picker(StickyGui& gui) {
+    cancel_title_edit(gui);
+    cancel_find_edit(gui);
+    cancel_open_picker(gui);
+    gui.show_theme_picker = true;
+    gui.theme_picker_cursor = static_cast<std::size_t>(gui.theme_id);
+}
+
+void toggle_theme_picker(StickyGui& gui) {
+    if (gui.show_theme_picker) {
+	cancel_theme_picker(gui);
+    } else {
+	begin_theme_picker(gui);
+    }
+}
+
+void theme_picker_apply(StickyGui& gui) {
+    if (gui.theme_picker_cursor >= kThemePickerCount) {
+	cancel_theme_picker(gui);
+	return;
+    }
+    set_theme(gui, static_cast<GuiThemeId>(gui.theme_picker_cursor));
+    cancel_theme_picker(gui);
+}
+
+bool handle_theme_picker_keys(StickyGui& gui, const SDL_Event& event) {
+    if (!gui.show_theme_picker) {
+	return false;
+    }
+
+    if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat) {
+	switch (event.key.scancode) {
+	case SDL_SCANCODE_ESCAPE:
+	    cancel_theme_picker(gui);
+	    return true;
+	case SDL_SCANCODE_UP:
+	    if (gui.theme_picker_cursor > 0) {
+		--gui.theme_picker_cursor;
+	    }
+	    return true;
+	case SDL_SCANCODE_DOWN:
+	    if (gui.theme_picker_cursor + 1 < kThemePickerCount) {
+		++gui.theme_picker_cursor;
+	    }
+	    return true;
+	case SDL_SCANCODE_RETURN:
+	case SDL_SCANCODE_KP_ENTER:
+	    theme_picker_apply(gui);
+	    return true;
+	default:
+	    break;
+	}
+    }
+    return false;
+}
+
+bool handle_theme_picker_mouse(StickyGui& gui, const SDL_Event& event) {
+    if (!gui.sidebar_visible) {
+	if (gui.show_theme_picker) {
+	    cancel_theme_picker(gui);
+	}
+	return false;
+    }
+
+    if (event.type != SDL_EVENT_MOUSE_BUTTON_DOWN && event.type != SDL_EVENT_MOUSE_BUTTON_UP
+	&& event.type != SDL_EVENT_MOUSE_MOTION) {
+	return false;
+    }
+    if (event.type != SDL_EVENT_MOUSE_MOTION && event.button.button != SDL_BUTTON_LEFT) {
+	return gui.show_theme_picker;
+    }
+
+    const float mx = event.type == SDL_EVENT_MOUSE_MOTION ? event.motion.x : event.button.x;
+    const float my = event.type == SDL_EVENT_MOUSE_MOTION ? event.motion.y : event.button.y;
+
+    float badge_x = 0.0f;
+    float badge_y = 0.0f;
+    float badge_w = 0.0f;
+    float badge_h = 0.0f;
+    theme_badge_rect(gui, badge_x, badge_y, badge_w, badge_h);
+    const bool on_badge = point_in_rect(mx, my, badge_x, badge_y, badge_w, badge_h);
+
+    if (event.type == SDL_EVENT_MOUSE_MOTION) {
+	if (!gui.show_theme_picker) {
+	    return false;
+	}
+	const int row = theme_picker_row_at_point(gui, mx, my);
+	if (row >= 0) {
+	    gui.theme_picker_cursor = static_cast<std::size_t>(row);
+	}
+	return true;
+    }
+
+    if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+	if (on_badge) {
+	    return gui.show_theme_picker;
+	}
+	if (!gui.show_theme_picker) {
+	    return false;
+	}
+	if (theme_picker_point_in_dropdown(gui, mx, my)) {
+	    const int row = theme_picker_row_at_point(gui, mx, my);
+	    if (row >= 0) {
+		gui.theme_picker_cursor = static_cast<std::size_t>(row);
+	    }
+	    return true;
+	}
+	cancel_theme_picker(gui);
+	return false;
+    }
+
+    // Mouse up — primary click action.
+    if (on_badge) {
+	toggle_theme_picker(gui);
+	return true;
+    }
+
+    if (gui.show_theme_picker) {
+	const int row = theme_picker_row_at_point(gui, mx, my);
+	if (row >= 0) {
+	    gui.theme_picker_cursor = static_cast<std::size_t>(row);
+	    theme_picker_apply(gui);
+	    return true;
+	}
+	if (theme_picker_point_in_dropdown(gui, mx, my)) {
+	    return true;
+	}
+	cancel_theme_picker(gui);
+	return true;
+    }
+
+    return false;
+}
+
 bool handle_overlay_keys(StickyGui& gui, const SDL_Event& event) {
     if (event.type != SDL_EVENT_KEY_DOWN || event.key.repeat) {
 	return false;
@@ -840,6 +1081,10 @@ bool handle_overlay_keys(StickyGui& gui, const SDL_Event& event) {
 	}
 	if (gui.show_open_picker) {
 	    cancel_open_picker(gui);
+	    return true;
+	}
+	if (gui.show_theme_picker) {
+	    cancel_theme_picker(gui);
 	    return true;
 	}
     }
@@ -900,7 +1145,6 @@ bool handle_overlay_keys(StickyGui& gui, const SDL_Event& event) {
 	case SDL_SCANCODE_N:
 	    {
 		StickyPanel panel = make_blank_panel(0.0f, 0.0f);
-		panel.height = kGridPanelH;
 		textbox_init_session(panel.session);
 		set_desk_panel(gui, std::move(panel));
 	    }
@@ -941,6 +1185,14 @@ bool handle_overlay_keys(StickyGui& gui, const SDL_Event& event) {
 bool handle_mouse(StickyGui& gui, const SDL_Event& event, SDL_Window* desk_window) {
     if (gui.pending_delete || gui.show_help || gui.show_open_picker || gui.editing_find) {
 	return false;
+    }
+
+    if (handle_theme_picker_mouse(gui, event)) {
+	return true;
+    }
+
+    if (gui.show_theme_picker) {
+	return true;
     }
 
     if (handle_sidebar_mouse(gui, event, desk_window)) {
@@ -1069,7 +1321,7 @@ void render_help_overlay(SDL_Renderer* renderer, const StickyGuiTheme& theme) {
     SDL_RenderDebugText(renderer, 24.0f, 524.0f,
 			"Ctrl+Z undo  Ctrl+Y redo  Ctrl+F find  F3 find next  F2 rename");
     SDL_RenderDebugText(renderer, 24.0f, 540.0f,
-			"Ctrl+T theme cycle  Ctrl+1/2/3 Minimal/Retro/Cyberpunk  H help  Esc quit");
+			"Ctrl+T theme cycle  Ctrl+1/2/3 themes  Sidebar Theme badge  H help  Esc quit");
     SDL_RenderDebugText(renderer, 24.0f, 556.0f,
 			"Ctrl+B sidebar  Drag sidebar row to pop out  Ctrl+Shift+P pop out");
     SDL_RenderDebugText(renderer, 24.0f, 572.0f,
@@ -1134,11 +1386,43 @@ void render_save_toast(SDL_Renderer* renderer, const StickyGui& gui, const Stick
 }
 
 void render_theme_badge(SDL_Renderer* renderer, const StickyGui& gui, const StickyGuiTheme& theme) {
-    const float x = sidebar_occupies_width(gui) + 16.0f;
-    render_overlay_bar(renderer, x, 16.0f, 200.0f, 28.0f, theme);
+    float x = 0.0f;
+    float y = 0.0f;
+    float w = 0.0f;
+    float h = 0.0f;
+    theme_badge_rect(gui, x, y, w, h);
+    render_overlay_bar(renderer, x, y, w, h, theme);
     gui_set_render_color(renderer, theme.overlay_text);
     std::string label = std::string("Theme: ") + theme.name;
-    SDL_RenderDebugText(renderer, x + 8.0f, 22.0f, label.c_str());
+    SDL_RenderDebugText(renderer, x + 8.0f, y + 10.0f, label.c_str());
+    SDL_RenderDebugText(renderer, x + w - 16.0f, y + 10.0f, gui.show_theme_picker ? "^" : "v");
+}
+
+void render_theme_picker(SDL_Renderer* renderer, const StickyGui& gui, const StickyGuiTheme& theme) {
+    float x = 0.0f;
+    float y = 0.0f;
+    float w = 0.0f;
+    float h = 0.0f;
+    theme_dropdown_rect(gui, x, y, w, h);
+    render_overlay_bar(renderer, x, y, w, h, theme);
+    gui_set_render_color(renderer, theme.overlay_muted);
+    SDL_RenderDebugText(renderer, x + 8.0f, y + 2.0f, "Choose theme");
+
+    float row_y = y + 4.0f + kLineH;
+    for (std::size_t i = 0; i < kThemePickerCount; ++i) {
+	const bool selected = (i == gui.theme_picker_cursor);
+	const bool active = (static_cast<GuiThemeId>(i) == gui.theme_id);
+	if (selected) {
+	    SDL_FRect row{x + 4.0f, row_y - 2.0f, w - 8.0f, kLineH + 4.0f};
+	    gui_set_render_color(renderer, theme.panel_border_focus);
+	    SDL_RenderFillRect(renderer, &row);
+	}
+	gui_set_render_color(renderer, selected ? theme.desk : theme.overlay_text);
+	const char* name = gui_theme_name(static_cast<GuiThemeId>(i));
+	std::string line = std::string(active ? "* " : "  ") + name;
+	SDL_RenderDebugText(renderer, x + 12.0f, row_y, line.c_str());
+	row_y += kLineH + 4.0f;
+    }
 }
 } // namespace
 
@@ -1162,7 +1446,6 @@ void sticky_gui_init(StickyGui& gui) {
     }
 
     StickyPanel panel = make_blank_panel(0.0f, 0.0f);
-    panel.height = kGridPanelH;
     set_desk_panel(gui, std::move(panel));
 }
 
@@ -1185,7 +1468,7 @@ GuiColor sticky_gui_desk_color(const StickyGui& gui) {
 
 bool sticky_gui_modal_blocks_body(const StickyGui& gui) {
     return gui.editing_title || gui.show_help || gui.pending_delete || gui.show_open_picker
-	|| gui.editing_find;
+	|| gui.show_theme_picker || gui.editing_find;
 }
 
 void sticky_gui_reflow_panel(StickyGui& gui, std::size_t panel_index) {
@@ -1219,7 +1502,6 @@ void sticky_gui_render(SDL_Renderer* renderer, StickyGui& gui) {
 			     panel.viewport, focused, chrome, theme);
     }
 
-    render_theme_badge(renderer, gui, theme);
     render_save_toast(renderer, gui, theme);
 
     if (gui.editing_find) {
@@ -1280,6 +1562,10 @@ bool sticky_gui_handle_event(StickyGui& gui, const SDL_Event& event, bool& quit_
     }
 
     if (handle_open_picker_keys(gui, event)) {
+	return true;
+    }
+
+    if (handle_theme_picker_keys(gui, event)) {
 	return true;
     }
 
@@ -1360,11 +1646,14 @@ bool sticky_gui_consume_pop_out_request(StickyGui& gui, StickyPanel& out_panel) 
     }
     const std::size_t index = gui.pop_out_panel_index;
     gui.pop_out_requested = false;
-    return extract_panel_at(gui, index, out_panel);
+    if (!extract_panel_at(gui, index, out_panel)) {
+	return false;
+    }
+    size_panel_for_pop_out(out_panel);
+    return true;
 }
 
 void sticky_gui_attach_panel(StickyGui& gui, StickyPanel panel) {
-    panel.height = kGridPanelH;
     set_desk_panel(gui, std::move(panel));
 }
 
@@ -1375,6 +1664,7 @@ bool sticky_gui_consume_sidebar_pop_out_request(StickyGui& gui, StickyPanel& out
     }
     gui.sidebar_pop_out_pending = false;
     out_panel = std::move(gui.sidebar_pop_out_panel);
+    size_panel_for_pop_out(out_panel);
     out_screen_x = gui.sidebar_pop_out_screen_x;
     out_screen_y = gui.sidebar_pop_out_screen_y;
     return true;

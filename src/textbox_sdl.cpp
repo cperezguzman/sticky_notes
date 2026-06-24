@@ -76,11 +76,31 @@ float sticky_panel_title_bar_height() {
 }
 
 float sticky_panel_close_button_width() {
-    return kLineH + kPadding;
+    return kLineH;
 }
 
 float sticky_panel_dock_button_width() {
-    return kLineH + kPadding;
+    return kLineH;
+}
+
+void sticky_panel_close_button_rect(float panel_x, float panel_y, float panel_width, float& out_x,
+				    float& out_y, float& out_w, float& out_h) {
+    const float title_bar_h = sticky_panel_title_bar_height();
+    out_w = kLineH;
+    out_h = kLineH;
+    out_x = panel_x + panel_width - out_w - kPadding;
+    out_y = panel_y + (title_bar_h - out_h) * 0.5f;
+}
+
+void sticky_panel_dock_button_rect(float panel_x, float panel_y, float panel_width,
+				   bool has_close_button, float& out_x, float& out_y, float& out_w,
+				   float& out_h) {
+    const float title_bar_h = sticky_panel_title_bar_height();
+    out_w = kLineH;
+    out_h = kLineH;
+    out_y = panel_y + (title_bar_h - out_h) * 0.5f;
+    const float close_offset = has_close_button ? out_w + kPadding : 0.0f;
+    out_x = panel_x + panel_width - out_w - kPadding - close_offset;
 }
 
 std::size_t textbox_body_max_columns(float panel_width) {
@@ -155,24 +175,32 @@ void textbox_render_panel(SDL_Renderer* renderer, float x, float y, float width,
     SDL_RenderDebugText(renderer, x + kPadding, y + kPadding, title);
 
     if (chrome.show_close_button) {
-	const float btn_w = sticky_panel_close_button_width();
-	const float btn_x = x + width - btn_w - kPadding * 0.5f;
-	SDL_FRect close_btn{btn_x, y + kPadding * 0.5f, btn_w, kLineH};
+	float btn_x = 0.0f;
+	float btn_y = 0.0f;
+	float btn_w = 0.0f;
+	float btn_h = 0.0f;
+	sticky_panel_close_button_rect(x, y, width, btn_x, btn_y, btn_w, btn_h);
+	SDL_FRect close_btn{btn_x, btn_y, btn_w, btn_h};
 	gui_set_render_color(renderer, theme.close_btn);
 	SDL_RenderFillRect(renderer, &close_btn);
 	gui_set_render_color(renderer, theme.close_text);
-	SDL_RenderDebugText(renderer, btn_x + 4.0f, y + kPadding, "x");
+	const float glyph_x = btn_x + (btn_w - kCharW) * 0.5f;
+	SDL_RenderDebugText(renderer, glyph_x, btn_y, "x");
     }
 
     if (chrome.show_dock_button) {
-	const float btn_w = sticky_panel_dock_button_width();
-	const float close_w = chrome.show_close_button ? sticky_panel_close_button_width() : 0.0f;
-	const float btn_x = x + width - close_w - btn_w - kPadding;
-	SDL_FRect dock_btn{btn_x, y + kPadding * 0.5f, btn_w, kLineH};
+	float btn_x = 0.0f;
+	float btn_y = 0.0f;
+	float btn_w = 0.0f;
+	float btn_h = 0.0f;
+	sticky_panel_dock_button_rect(x, y, width, chrome.show_close_button, btn_x, btn_y, btn_w,
+				      btn_h);
+	SDL_FRect dock_btn{btn_x, btn_y, btn_w, btn_h};
 	gui_set_render_color(renderer, theme.close_btn);
 	SDL_RenderFillRect(renderer, &dock_btn);
 	gui_set_render_color(renderer, theme.close_text);
-	SDL_RenderDebugText(renderer, btn_x + 4.0f, y + kPadding, "v");
+	const float glyph_x = btn_x + (btn_w - kCharW) * 0.5f;
+	SDL_RenderDebugText(renderer, glyph_x, btn_y, "v");
     }
 
     if (chrome.title_caret_visible) {

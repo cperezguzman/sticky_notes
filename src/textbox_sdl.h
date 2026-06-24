@@ -19,6 +19,13 @@ float sticky_panel_close_button_width();
 
 float sticky_panel_dock_button_width();
 
+void sticky_panel_close_button_rect(float panel_x, float panel_y, float panel_width, float& out_x,
+				  float& out_y, float& out_w, float& out_h);
+
+void sticky_panel_dock_button_rect(float panel_x, float panel_y, float panel_width,
+				   bool has_close_button, float& out_x, float& out_y, float& out_w,
+				   float& out_h);
+
 struct PanelChrome {
     const char* title_text = nullptr;
     bool show_close_button = false;

@@ -19,18 +19,11 @@ bool point_in_rect(float px, float py, float x, float y, float w, float h) {
 }
 
 void close_button_rect(float panel_w, float& out_x, float& out_y, float& out_w, float& out_h) {
-    out_w = sticky_panel_close_button_width();
-    out_h = sticky_panel_title_bar_height() - 2.0f * kPadding;
-    out_x = panel_w - out_w - kPadding * 0.5f;
-    out_y = kPadding * 0.5f;
+    sticky_panel_close_button_rect(0.0f, 0.0f, panel_w, out_x, out_y, out_w, out_h);
 }
 
 void dock_button_rect(float panel_w, float& out_x, float& out_y, float& out_w, float& out_h) {
-    out_w = sticky_panel_dock_button_width();
-    out_h = sticky_panel_title_bar_height() - 2.0f * kPadding;
-    const float close_w = sticky_panel_close_button_width();
-    out_x = panel_w - close_w - out_w - kPadding;
-    out_y = kPadding * 0.5f;
+    sticky_panel_dock_button_rect(0.0f, 0.0f, panel_w, true, out_x, out_y, out_w, out_h);
 }
 
 void persist_panel(StickyPanel& panel) {
