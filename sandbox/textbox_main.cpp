@@ -45,6 +45,11 @@ int main(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
 
+    // GNOME/KDE (Wayland + X11): app id must match sticky-notes.desktop / StartupWMClass.
+    SDL_SetAppMetadata("Sticky Notes", "1.0", "sticky-notes");
+    SDL_SetHint(SDL_HINT_APP_ID, "sticky-notes");
+    SDL_SetHint(SDL_HINT_APP_NAME, "Sticky Notes");
+
     if (!SDL_Init(SDL_INIT_VIDEO)) {
 	std::cerr << "SDL_Init failed: " << SDL_GetError() << "\n";
 	return 1;

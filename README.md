@@ -6,6 +6,73 @@ A small **C++20** command-line note editor. Notes are **plain text files** under
 
 - **Compiler:** GCC or Clang with **C++20** (`std::format`, `std::filesystem`, etc.)
 - **OS:** Linux is assumed (paths use `/`; run the binary from the project root so `notes/` resolves correctly)
+- **GUI (optional):** `cmake` and `curl` — SDL3 is built locally on first GUI setup (`third_party/`, gitignored)
+
+### Install build tools (if needed)
+
+```bash
+# Debian / Ubuntu
+sudo apt update && sudo apt install build-essential cmake curl
+
+# Fedora
+sudo dnf install gcc-c++ make cmake curl
+```
+
+## Quick start (fresh clone)
+
+From the repository root:
+
+```bash
+git clone https://github.com/cperezguzman/sticky_notes.git
+cd sticky_notes
+./scripts/setup.sh
+```
+
+That checks for `g++`, `make`, `cmake`, and `curl`, builds the CLI, builds SDL3 + GUI (first run can take a few minutes), and prints how to launch.
+
+**App menu + dock icon (Linux):**
+
+```bash
+./scripts/setup.sh --desktop
+```
+
+**Terminal only (skip SDL/GUI):**
+
+```bash
+./scripts/setup.sh --cli-only
+```
+
+Equivalent: `make setup` (no `--desktop`; run `make desktop` separately if you want the launcher).
+
+Then:
+
+```bash
+./sticky_notes                        # terminal editor
+./scripts/run-sticky-notes-gui.sh     # SDL desk GUI
+```
+
+## Quick start (Docker — one command)
+
+If you have [Docker](https://docs.docker.com/engine/install/) installed and don’t want to install build tools on the host:
+
+```bash
+git clone https://github.com/cperezguzman/sticky_notes.git
+cd sticky_notes
+./scripts/docker.sh          # GUI (Linux desktop + X11/Wayland)
+./scripts/docker.sh cli      # terminal editor only
+```
+
+First run **builds the image** (SDL3 + app inside Docker; may take several minutes). Your notes are stored in `./notes` on the host.
+
+| Command | What it does |
+|---------|----------------|
+| `./scripts/docker.sh` or `make docker` | Build image if needed, run GUI |
+| `./scripts/docker.sh cli` or `make docker-cli` | Build image if needed, run CLI |
+| `./scripts/docker.sh build` or `make docker-build` | Build image only |
+
+**GUI in Docker:** Linux with `DISPLAY` set (GNOME/KDE/X11). The script mounts `/tmp/.X11-unix` so the window appears on your desktop. macOS/Windows GUI in Docker is not supported here (use native `./scripts/setup.sh` or CLI via Docker).
+
+**No compiler on host:** Docker path only needs Docker; `cmake`/`g++` run inside the image.
 
 ## Build
 
@@ -114,8 +181,11 @@ sandbox/
   textbox_main.cpp   — multi-window SDL loop (desk + floating pop-outs)
 scripts/
   build-sdl3.sh           — vendored SDL3 install (local, gitignored)
+  setup.sh                — fresh-clone setup (CLI + GUI; optional --desktop)
+  docker.sh               — Docker one-click (CLI or GUI; no host toolchain)
   run-sticky-notes-gui.sh — launch GUI from repo root (builds if needed)
   install-desktop.sh      — install ~/.local/share/applications entry
+Dockerfile / docker-compose.yml — container build and run services
 assets/
   sticky-notes.png        — launcher icon
 tests/
@@ -129,7 +199,7 @@ notes/               — local data (gitignored; auto-created on first run)
 Makefile
 ```
 
-Build targets: `sticky_notes` (CLI), `test_runner`, `textbox_test_harness`, `textbox_sandbox` (GUI), `gui` (alias), `desktop` (Linux launcher install).
+Build targets: `sticky_notes` (CLI), `test_runner`, `textbox_test_harness`, `textbox_sandbox` (GUI), `gui` (alias), `setup` (fresh clone), `desktop` (Linux launcher), `docker` / `docker-cli` / `docker-build` (container).
 
 ## Tests
 
@@ -207,6 +277,8 @@ Then search for **Sticky Notes** in your desktop environment’s application men
 You can also pin the installed entry to your dock/taskbar, or run `./scripts/run-sticky-notes-gui.sh` directly.
 
 If you move the repo later, rerun `make desktop` so the launcher paths point at the new location.
+
+The launcher, SDL app id (`sticky-notes`), and `StartupWMClass` in the `.desktop` file must agree so GNOME/KDE show the notepad icon on the dock for running windows — not a generic fallback icon. After updating launcher scripts, run `make desktop` (refreshes the icon theme cache), rebuild with `make textbox`, quit any running copy, and launch again from the app menu.
 
 ## Phase 2 — SDL3 textbox sandbox
 

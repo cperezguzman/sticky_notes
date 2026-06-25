@@ -6,6 +6,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 BIN="$ROOT/textbox_sandbox"
+GUI_NAME="$ROOT/sticky-notes"
 
 if [[ ! -x "$BIN" ]]; then
     if [[ ! -f "$ROOT/third_party/sdl3-install/lib/libSDL3.so" ]] \
@@ -17,4 +18,6 @@ if [[ ! -x "$BIN" ]]; then
     make -C "$ROOT" textbox
 fi
 
-exec "$BIN"
+ln -sf "$BIN" "$GUI_NAME"
+
+exec env SDL_APP_ID=sticky-notes SDL_APP_NAME="Sticky Notes" "$GUI_NAME"

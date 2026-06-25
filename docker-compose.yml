@@ -1,0 +1,26 @@
+services:
+  sticky-notes-cli:
+    build: .
+    image: sticky-notes:local
+    stdin_open: true
+    tty: true
+    working_dir: /app
+    volumes:
+      - ./notes:/app/notes
+    command: ["./sticky_notes"]
+
+  sticky-notes-gui:
+    build: .
+    image: sticky-notes:local
+    working_dir: /app
+    environment:
+      DISPLAY: ${DISPLAY:-:0}
+      SDL_VIDEODRIVER: x11
+      SDL_APP_ID: sticky-notes
+      SDL_APP_NAME: Sticky Notes
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./notes:/app/notes
+    devices:
+      - /dev/dri:/dev/dri
+    command: ["./scripts/run-sticky-notes-gui.sh"]

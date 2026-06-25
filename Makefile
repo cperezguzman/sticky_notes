@@ -20,7 +20,7 @@ TEXTBOX_SRCS = sandbox/textbox_main.cpp src/sticky_gui.cpp src/sticky_popup.cpp 
 	src/gui_theme.cpp src/note_editor.cpp src/sticky_note.cpp src/note_store.cpp \
 	src/note_file_codec.cpp src/parser.cpp
 
-.PHONY: all clean test smoke textbox textbox-smoke sdl3 gui desktop
+.PHONY: all clean test smoke textbox textbox-smoke sdl3 gui desktop setup docker docker-cli docker-gui docker-build
 
 all: sticky_notes
 
@@ -57,6 +57,22 @@ gui: textbox
 # Install ~/.local/share/applications/sticky-notes.desktop (search "Sticky Notes" in app menu).
 desktop:
 	./scripts/install-desktop.sh
+
+# Fresh-clone setup: deps check, CLI + GUI build, optional desktop entry.
+setup:
+	./scripts/setup.sh
+
+# Docker one-click (requires Docker; GUI needs Linux + DISPLAY).
+docker: docker-gui
+
+docker-build:
+	./scripts/docker.sh build
+
+docker-cli:
+	./scripts/docker.sh cli
+
+docker-gui:
+	./scripts/docker.sh gui
 
 clean:
 	rm -f sticky_notes test_runner textbox_sandbox textbox_test_harness

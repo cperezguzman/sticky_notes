@@ -1,0 +1,24 @@
+# Build artifacts and local data — rebuilt inside the image or mounted at run time.
+notes/
+third_party/
+exports/
+
+# Binaries
+sticky_notes
+textbox_sandbox
+sticky-notes
+test_runner
+textbox_test_harness
+*.o
+
+# Git and local dev tooling (not needed to compile)
+.git/
+.gitignore
+docs/
+.cursor/
+AGENTS.md
+.env
+.env.example
+
+# Large generated docs
+**/*.pdf
