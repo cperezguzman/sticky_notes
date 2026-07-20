@@ -1,6 +1,11 @@
-# Sticky Notes (terminal)
+# Sticky Notes
 
-A small **C++20** command-line note editor. Notes are **plain text files** under `notes/`, with a monotonic ID counter so each new note gets a stable filename.
+A **C++20** sticky-notes app with two front ends over the same local store:
+
+- **Terminal editor** — command-driven editing (line/cursor ops, undo/redo, find, yank/paste, list/open/export).
+- **SDL3 desk GUI** — draggable/resizable note panels, themes, sidebar, and always-on-top pop-out windows.
+
+Notes are **plain text files** under `notes/`, with a monotonic ID counter so each new note gets a stable `note_<id>.txt` filename. Both UIs share the same load/save codec and edit core; the project doubles as a learning path toward a custom GUI textbox (platform-neutral input seam → SDL adapter → multi-panel desk).
 
 ## Requirements
 

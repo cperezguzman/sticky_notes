@@ -74,5 +74,8 @@ docker-cli:
 docker-gui:
 	./scripts/docker.sh gui
 
+# Optional local targets (Makefile.local is gitignored)
+-include Makefile.local
+
 clean:
 	rm -f sticky_notes test_runner textbox_sandbox textbox_test_harness

@@ -55,7 +55,7 @@ int main(int argc, char* argv[]) {
 	return 1;
     }
 
-    SDL_Window* desk_window = SDL_CreateWindow("Sticky Notes - Phase 4", 960, 640, 0);
+    SDL_Window* desk_window = SDL_CreateWindow("Sticky Notes", 960, 640, 0);
     if (desk_window == nullptr) {
 	std::cerr << "SDL_CreateWindow failed: " << SDL_GetError() << "\n";
 	SDL_Quit();

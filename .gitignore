@@ -18,11 +18,34 @@ sticky-notes
 notes/
 
 # Local developer tooling (not for GitHub)
-# Obsidian vault, docs/agents/, docs/adr/
+# Obsidian vault, docs/agents/, docs/adr/, docs/teaching/
 docs/
 # Cursor MCP config
 .cursor/
 AGENTS.md
+
+# Personal learning track (local only — lessons, study site, labs)
+lessons/
+exams/
+labs/
+study/
+learn/
+learning-records/
+reference/
+CURRICULUM.md
+MISSION.md
+TOOLING.md
+NOTES.md
+GLOSSARY.md
+RESOURCES.md
+assets/course.css
+assets/course-dashboard.js
+assets/dashboard-extras.css
+assets/quiz.js
+sandbox/labs/
+scripts/run-lab.sh
+scripts/verify-lab03.sh
+Makefile.local
 
 .env
 .env.example
