@@ -7,6 +7,8 @@ A **C++20** sticky-notes app with two front ends over the same local store:
 
 Notes are **plain text files** under `notes/`, with a monotonic ID counter so each new note gets a stable `note_<id>.txt` filename. Both UIs share the same load/save codec and edit core; the project doubles as a learning path toward a custom GUI textbox (platform-neutral input seam → SDL adapter → multi-panel desk).
 
+Optional **TypeScript / Node HTTP API** (`server/`) is a third adapter over the same `notes/` directory — JSON list/get/create/update/delete on `127.0.0.1` without changing the C++ editor core. See [server/README.md](server/README.md).
+
 ## Requirements
 
 - **Compiler:** GCC or Clang with **C++20** (`std::format`, `std::filesystem`, etc.)
@@ -184,6 +186,8 @@ src/
   sticky_popup.*     — Phase 4+: pop-out notes as always-on-top SDL windows
 sandbox/
   textbox_main.cpp   — multi-window SDL loop (desk + floating pop-outs)
+server/
+  package.json / src/ — optional TypeScript notes HTTP API (same notes/ store)
 scripts/
   build-sdl3.sh           — vendored SDL3 install (local, gitignored)
   setup.sh                — fresh-clone setup (CLI + GUI; optional --desktop)

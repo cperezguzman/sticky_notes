@@ -50,6 +50,10 @@ Makefile.local
 .env
 .env.example
 
+# TypeScript API (server/)
+server/node_modules/
+server/dist/
+
 # Markdown exports (regenerate with export markdown)
 exports/
 
