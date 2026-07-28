@@ -1,3 +1,8 @@
+/**
+ * Tests for noteCodec — parse/serialize must match the C++ sample fixture
+ * under tests/fixtures/note_sample.txt so CLI and API stay compatible.
+ */
+
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -50,6 +55,23 @@ describe("noteCodec", () => {
     assert.equal(note.created, "April 21, 2026 at 10:39 PM");
     assert.equal(note.lastEdited, "April 21, 2026 at 10:40 PM");
     assert.equal(displayTimestamp("Created: x"), "x");
+  });
+
+  it("parses optional Source section", () => {
+    const raw = serializeNoteFile({
+      title: "Linked",
+      id: 9,
+      createdLine: "Created: July 27, 2026 at 01:00 PM",
+      lastEditedLine: "Last Edited: July 27, 2026 at 01:00 PM",
+      body: "notes about the page",
+      sourceUrl: "https://example.com/trip",
+    });
+    const parsed = parseNoteFile(raw);
+    assert.ok(parsed);
+    assert.equal(parsed.sourceUrl, "https://example.com/trip");
+    const note = parsedToNoteJson(parsed);
+    assert.ok(note);
+    assert.equal(note.sourceUrl, "https://example.com/trip");
   });
 
   it("rejects unknown labels", () => {

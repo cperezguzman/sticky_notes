@@ -1,5 +1,14 @@
 #pragma once
 
+// note_editor — in-memory multiline text editor used by the CLI, SDL textbox, and tests.
+//
+// EditorSession owns the sticky_note body plus a line/column cursor, undo/redo stacks,
+// find state, and hard-break flags (Enter vs soft wrap). Most mutating ops push an
+// undo snapshot first. EditStatus returns structured outcomes so GUI/CLI can show
+// messages without parsing strings.
+//
+// Coordinates: lines and columns are 0-based internally; goto_line takes 1-based args.
+
 #include "sticky_note.h"
 
 #include <cstddef>

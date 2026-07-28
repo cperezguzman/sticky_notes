@@ -51,6 +51,11 @@ bool parse_note_file(std::ifstream& file, ParsedNoteFile& out) {
 		return false;
 	    }
 	    out.last_edited_line = line;
+	} else if (part == "Source:") {
+	    if (!read_value_line()) {
+		return false;
+	    }
+	    out.source_url = line;
 	} else if (part == "Body:") {
 	    std::ostringstream body;
 	    bool first = true;

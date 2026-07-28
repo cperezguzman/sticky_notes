@@ -30,6 +30,9 @@ void write_new_note_file(const sticky_note& sn) {
     out << "ID:\n" << sn.id << "\n";
     out << "Created:\n" << get_created(sn) << "\n";
     out << "Last Edited:\n" << get_last_edit(sn, "date_time") << "\n";
+    if (!sn.source_url.empty()) {
+	out << "Source:\n" << sn.source_url << "\n";
+    }
     out << "Body:\n";
     for (const auto& t : sn.text) {
 	out << t << "\n";
@@ -49,6 +52,7 @@ bool apply_parsed_note(sticky_note& sn, const ParsedNoteFile& parsed, const std:
 	return false;
     }
     sn.note_path = path;
+    sn.source_url = parsed.source_url;
     sn.text = body_lines_from_parsed(parsed);
 
     const auto now = std::chrono::system_clock::now();
@@ -154,6 +158,9 @@ void save_note(const sticky_note& sn) {
     out << "ID:\n" << sn.id << "\n";
     out << "Created:\n" << get_created(sn) << "\n";
     out << "Last Edited:\n" << get_last_edit(sn, "date_time") << "\n";
+    if (!sn.source_url.empty()) {
+	out << "Source:\n" << sn.source_url << "\n";
+    }
     out << "Body:\n";
     for (const auto& t : sn.text) {
 	out << t << "\n";
@@ -294,6 +301,9 @@ std::string format_note_as_markdown(const sticky_note& sn) {
 	<< yaml_double_quote(timestamp_value_for_yaml(get_last_edit(sn, "date_time"))) << "\n";
     if (!sn.note_path.empty()) {
 	out << "source: " << yaml_double_quote(sn.note_path) << "\n";
+    }
+    if (!sn.source_url.empty()) {
+	out << "context_url: " << yaml_double_quote(sn.source_url) << "\n";
     }
     out << "---\n\n";
     for (std::size_t i = 0; i < sn.text.size(); ++i) {

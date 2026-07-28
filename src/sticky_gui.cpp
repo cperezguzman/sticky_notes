@@ -29,8 +29,10 @@ constexpr float kSidebarWidth = 220.0f;
 constexpr float kSidebarTabWidth = 22.0f;
 constexpr float kSidebarRowH = 18.0f;
 constexpr float kSidebarHeaderH = 28.0f;
+constexpr float kSidebarSearchH = 18.0f;
 constexpr float kSidebarPad = 8.0f;
 constexpr int kSidebarDragThresholdPx = 8;
+constexpr std::size_t kMaxSidebarSearchLen = 48;
 constexpr const char* kDeskStatePath = "notes/desk_state.txt";
 
 // Matches sandbox window (textbox_main.cpp); used for startup grid layout.
@@ -52,9 +54,38 @@ bool extract_panel_at(StickyGui& gui, std::size_t index, StickyPanel& out);
 void cancel_theme_picker(StickyGui& gui);
 void render_theme_badge(SDL_Renderer* renderer, const StickyGui& gui, const StickyGuiTheme& theme);
 void render_theme_picker(SDL_Renderer* renderer, const StickyGui& gui, const StickyGuiTheme& theme);
+void begin_sidebar_search(StickyGui& gui);
+void clear_sidebar_search(StickyGui& gui);
 
 float sidebar_theme_top_y() {
     return kDefaultDeskH - kSidebarPad - kThemeBadgeH - 4.0f;
+}
+
+float sidebar_list_top_y() {
+    return kSidebarHeaderH + kSidebarSearchH;
+}
+
+std::string ascii_lower(std::string s) {
+    for (char& ch : s) {
+	ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return s;
+}
+
+bool note_matches_sidebar_query(const sticky_note& note, const std::string& query) {
+    const std::string q = ascii_lower(query);
+    if (q.empty()) {
+	return true;
+    }
+    if (ascii_lower(note.title).find(q) != std::string::npos) {
+	return true;
+    }
+    for (const std::string& line : note.text) {
+	if (ascii_lower(line).find(q) != std::string::npos) {
+	    return true;
+	}
+    }
+    return false;
 }
 
 bool ctrl_down(const SDL_KeyboardEvent& key) {
@@ -188,6 +219,9 @@ void refresh_sidebar_entries(StickyGui& gui) {
 	if (!load_note_from_path(note, entry.second.second)) {
 	    continue;
 	}
+	if (!note_matches_sidebar_query(note, gui.sidebar_search_buffer)) {
+	    continue;
+	}
 	SidebarEntry row{};
 	row.id = entry.first;
 	row.title = entry.second.first.empty() ? "Untitled" : entry.second.first;
@@ -284,25 +318,32 @@ bool sidebar_row_rect(const StickyGui& gui, std::size_t index, float& out_x, flo
 	return false;
     }
     const std::size_t visible_index = index - gui.sidebar_scroll;
+    const float list_top = sidebar_list_top_y();
     const float theme_top = sidebar_theme_top_y();
     const std::size_t max_visible_rows =
-	static_cast<std::size_t>((theme_top - kSidebarHeaderH) / kSidebarRowH);
+	static_cast<std::size_t>((theme_top - list_top) / kSidebarRowH);
     if (visible_index >= max_visible_rows) {
 	return false;
     }
     out_x = kSidebarPad;
-    out_y = kSidebarHeaderH + static_cast<float>(visible_index) * kSidebarRowH;
+    out_y = list_top + static_cast<float>(visible_index) * kSidebarRowH;
     out_w = kSidebarWidth - 2.0f * kSidebarPad;
     out_h = kSidebarRowH;
     return true;
 }
 
+bool point_in_sidebar_search(float px, float py) {
+    return point_in_rect(px, py, kSidebarPad, kSidebarHeaderH, kSidebarWidth - 2.0f * kSidebarPad,
+			 kSidebarSearchH);
+}
+
 int sidebar_row_at_point(const StickyGui& gui, float px, float py) {
-    if (!gui.sidebar_visible || px < 0.0f || px >= kSidebarWidth || py < kSidebarHeaderH
+    if (!gui.sidebar_visible || px < 0.0f || px >= kSidebarWidth || py < sidebar_list_top_y()
 	|| py >= sidebar_theme_top_y()) {
 	return -1;
     }
-    const std::size_t visible_row = static_cast<std::size_t>((py - kSidebarHeaderH) / kSidebarRowH);
+    const std::size_t visible_row =
+	static_cast<std::size_t>((py - sidebar_list_top_y()) / kSidebarRowH);
     const std::size_t index = gui.sidebar_scroll + visible_row;
     if (index >= gui.sidebar_entries.size()) {
 	return -1;
@@ -324,6 +365,7 @@ void toggle_sidebar(StickyGui& gui) {
     gui.sidebar_visible = !gui.sidebar_visible;
     if (!gui.sidebar_visible) {
 	cancel_theme_picker(gui);
+	gui.editing_sidebar_search = false;
     }
     if (!gui.panels.empty()) {
 	place_panel_on_desk(gui, gui.panels[gui.focused]);
@@ -373,13 +415,24 @@ bool handle_sidebar_mouse(StickyGui& gui, const SDL_Event& event, SDL_Window* de
 	if (!gui.sidebar_visible) {
 	    return mx < kSidebarTabWidth;
 	}
+	if (point_in_sidebar_search(mx, my)) {
+	    begin_sidebar_search(gui);
+	    return true;
+	}
 	const int row = sidebar_row_at_point(gui, mx, my);
 	if (row >= 0) {
+	    if (gui.editing_sidebar_search) {
+		gui.editing_sidebar_search = false;
+	    }
 	    gui.sidebar_drag_active = true;
 	    gui.sidebar_drag_pop_out_done = false;
 	    gui.sidebar_drag_index = static_cast<std::size_t>(row);
 	    gui.sidebar_drag_start_mx = mx;
 	    gui.sidebar_drag_start_my = my;
+	    return true;
+	}
+	if (gui.editing_sidebar_search) {
+	    gui.editing_sidebar_search = false;
 	    return true;
 	}
 	return false;
@@ -409,16 +462,37 @@ void render_sidebar(SDL_Renderer* renderer, StickyGui& gui, const StickyGuiTheme
 	gui_set_render_color(renderer, theme.overlay_text);
 	SDL_RenderDebugText(renderer, kSidebarPad, kSidebarPad, "Notes");
 
-	float row_y = kSidebarHeaderH;
+	const float search_y = kSidebarHeaderH;
+	if (gui.editing_sidebar_search) {
+	    gui_set_render_color(renderer, theme.overlay_text);
+	    std::string shown = gui.sidebar_search_buffer + "|";
+	    if (shown.size() > 24) {
+		shown = shown.substr(shown.size() - 24);
+	    }
+	    SDL_RenderDebugText(renderer, kSidebarPad, search_y, shown.c_str());
+	} else if (!gui.sidebar_search_buffer.empty()) {
+	    gui_set_render_color(renderer, theme.overlay_text);
+	    std::string shown = gui.sidebar_search_buffer;
+	    if (shown.size() > 24) {
+		shown = shown.substr(0, 21) + "...";
+	    }
+	    SDL_RenderDebugText(renderer, kSidebarPad, search_y, shown.c_str());
+	} else {
+	    gui_set_render_color(renderer, theme.overlay_muted);
+	    SDL_RenderDebugText(renderer, kSidebarPad, search_y, "Ctrl+K search");
+	}
+
+	float row_y = sidebar_list_top_y();
 	const float theme_top = sidebar_theme_top_y();
 	const std::size_t max_visible_rows =
-	    static_cast<std::size_t>((theme_top - kSidebarHeaderH) / kSidebarRowH);
+	    static_cast<std::size_t>((theme_top - sidebar_list_top_y()) / kSidebarRowH);
 	const std::size_t max_row = std::min(gui.sidebar_entries.size(),
 					     gui.sidebar_scroll + max_visible_rows);
 	for (std::size_t i = gui.sidebar_scroll; i < max_row; ++i) {
 	    const SidebarEntry& entry = gui.sidebar_entries[i];
 	    if (entry.on_desk) {
-		SDL_FRect row{kSidebarPad, row_y - 1.0f, kSidebarWidth - 2.0f * kSidebarPad, kSidebarRowH};
+		SDL_FRect row{kSidebarPad, row_y - 1.0f, kSidebarWidth - 2.0f * kSidebarPad,
+			      kSidebarRowH};
 		gui_set_render_color(renderer, theme.panel_border_focus);
 		SDL_RenderFillRect(renderer, &row);
 	    }
@@ -433,7 +507,9 @@ void render_sidebar(SDL_Renderer* renderer, StickyGui& gui, const StickyGuiTheme
 
 	if (gui.sidebar_entries.empty()) {
 	    gui_set_render_color(renderer, theme.overlay_muted);
-	    SDL_RenderDebugText(renderer, kSidebarPad, kSidebarHeaderH, "(no notes)");
+	    const char* empty_msg =
+		gui.sidebar_search_buffer.empty() ? "(no notes)" : "(no matches)";
+	    SDL_RenderDebugText(renderer, kSidebarPad, sidebar_list_top_y(), empty_msg);
 	}
 
 	render_theme_badge(renderer, gui, theme);
@@ -586,6 +662,7 @@ void refresh_open_picker(StickyGui& gui) {
 void begin_open_picker(StickyGui& gui) {
     cancel_title_edit(gui);
     cancel_find_edit(gui);
+    gui.editing_sidebar_search = false;
     refresh_open_picker(gui);
     gui.show_open_picker = true;
     gui.open_picker_cursor = 0;
@@ -623,6 +700,7 @@ void begin_title_edit(StickyGui& gui) {
     if (gui.panels.empty()) {
 	return;
     }
+    gui.editing_sidebar_search = false;
     gui.editing_title = true;
     gui.title_edit_buffer = gui.panels[gui.focused].session.note.title;
     if (gui.title_edit_buffer.empty()) {
@@ -747,6 +825,7 @@ void begin_find_edit(StickyGui& gui) {
     if (gui.panels.empty()) {
 	return;
     }
+    gui.editing_sidebar_search = false;
     gui.editing_find = true;
     gui.find_buffer = gui.panels[gui.focused].session.find_needle;
     gui.find_cursor = gui.find_buffer.size();
@@ -757,6 +836,49 @@ void cancel_find_edit(StickyGui& gui) {
     gui.editing_find = false;
     gui.find_buffer.clear();
     gui.find_cursor = 0;
+}
+
+void clear_sidebar_search(StickyGui& gui) {
+    gui.editing_sidebar_search = false;
+    gui.sidebar_search_buffer.clear();
+    gui.sidebar_search_cursor = 0;
+    refresh_sidebar_entries(gui);
+}
+
+void begin_sidebar_search(StickyGui& gui) {
+    cancel_find_edit(gui);
+    cancel_open_picker(gui);
+    cancel_theme_picker(gui);
+    cancel_title_edit(gui);
+    if (!gui.sidebar_visible) {
+	gui.sidebar_visible = true;
+	if (!gui.panels.empty()) {
+	    place_panel_on_desk(gui, gui.panels[gui.focused]);
+	}
+    }
+    gui.editing_sidebar_search = true;
+    gui.sidebar_search_cursor = gui.sidebar_search_buffer.size();
+}
+
+bool handle_sidebar_search_keys(StickyGui& gui, const SDL_Event& event) {
+    if (!gui.editing_sidebar_search) {
+	return false;
+    }
+    bool cancel = false;
+    bool commit = false;
+    const std::string before = gui.sidebar_search_buffer;
+    if (handle_text_buffer_keys(event, gui.sidebar_search_buffer, gui.sidebar_search_cursor,
+				kMaxSidebarSearchLen, cancel, commit)) {
+	if (cancel) {
+	    clear_sidebar_search(gui);
+	} else if (commit) {
+	    gui.editing_sidebar_search = false;
+	} else if (gui.sidebar_search_buffer != before) {
+	    refresh_sidebar_entries(gui);
+	}
+	return true;
+    }
+    return true;
 }
 
 void run_find(StickyGui& gui) {
@@ -1079,6 +1201,10 @@ bool handle_overlay_keys(StickyGui& gui, const SDL_Event& event) {
 	    cancel_find_edit(gui);
 	    return true;
 	}
+	if (gui.editing_sidebar_search || !gui.sidebar_search_buffer.empty()) {
+	    clear_sidebar_search(gui);
+	    return true;
+	}
 	if (gui.show_open_picker) {
 	    cancel_open_picker(gui);
 	    return true;
@@ -1115,6 +1241,9 @@ bool handle_overlay_keys(StickyGui& gui, const SDL_Event& event) {
 	    return true;
 	case SDL_SCANCODE_F:
 	    begin_find_edit(gui);
+	    return true;
+	case SDL_SCANCODE_K:
+	    begin_sidebar_search(gui);
 	    return true;
 	case SDL_SCANCODE_Z:
 	    if (!gui.panels.empty()) {
@@ -1319,11 +1448,11 @@ void render_help_overlay(SDL_Renderer* renderer, const StickyGuiTheme& theme) {
     SDL_RenderDebugText(renderer, 24.0f, 508.0f,
 			"Ctrl+O open  Ctrl+S save  Ctrl+N new  Ctrl+W close  Ctrl+Shift+W delete");
     SDL_RenderDebugText(renderer, 24.0f, 524.0f,
-			"Ctrl+Z undo  Ctrl+Y redo  Ctrl+F find  F3 find next  F2 rename");
+			"Ctrl+Z undo  Ctrl+Y redo  Ctrl+F find  F3 next  Ctrl+K search notes");
     SDL_RenderDebugText(renderer, 24.0f, 540.0f,
-			"Ctrl+T theme cycle  Ctrl+1/2/3 themes  Sidebar Theme badge  H help  Esc quit");
+			"Ctrl+T theme  Ctrl+1/2/3 themes  Sidebar Theme badge  H help  Esc quit");
     SDL_RenderDebugText(renderer, 24.0f, 556.0f,
-			"Ctrl+B sidebar  Drag sidebar row to pop out  Ctrl+Shift+P pop out");
+			"Ctrl+B sidebar  Drag row to pop out  Ctrl+Shift+P pop out  F2 rename");
     SDL_RenderDebugText(renderer, 24.0f, 572.0f,
 			"Popup: v dock  Dbl-click title dock  Enter newline");
 }
@@ -1468,7 +1597,7 @@ GuiColor sticky_gui_desk_color(const StickyGui& gui) {
 
 bool sticky_gui_modal_blocks_body(const StickyGui& gui) {
     return gui.editing_title || gui.show_help || gui.pending_delete || gui.show_open_picker
-	|| gui.show_theme_picker || gui.editing_find;
+	|| gui.show_theme_picker || gui.editing_find || gui.editing_sidebar_search;
 }
 
 void sticky_gui_reflow_panel(StickyGui& gui, std::size_t panel_index) {
@@ -1570,6 +1699,10 @@ bool sticky_gui_handle_event(StickyGui& gui, const SDL_Event& event, bool& quit_
     }
 
     if (handle_find_keys(gui, event)) {
+	return true;
+    }
+
+    if (handle_sidebar_search_keys(gui, event)) {
 	return true;
     }
 

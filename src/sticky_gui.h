@@ -1,5 +1,11 @@
 #pragma once
 
+// sticky_gui — SDL “desk” of floating sticky panels (drag/resize, sidebar, pickers).
+//
+// Each StickyPanel embeds an EditorSession + TextboxViewport. StickyGui holds the
+// panel list, focus, theme, and modal UI state (open picker, theme picker, etc.).
+// Input/rendering are driven from sticky_gui.cpp + textbox_sdl.
+
 #include "gui_theme.h"
 #include "note_editor.h"
 #include "note_store.h"
@@ -65,6 +71,10 @@ struct StickyGui {
     std::string find_buffer;
     std::size_t find_cursor = 0;
     std::string find_status;
+
+    bool editing_sidebar_search = false;
+    std::string sidebar_search_buffer;
+    std::size_t sidebar_search_cursor = 0;
 
     Uint32 save_toast_until_ms = 0;
 

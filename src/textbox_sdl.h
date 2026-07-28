@@ -1,5 +1,11 @@
 #pragma once
 
+// textbox_sdl — SDL3 adapter between platform events and the textbox_input seam.
+//
+// textbox_handle_sdl_event translates SDL key/text events into TextboxKeyEvent and
+// updates EditorSession. textbox_render_panel draws the sticky chrome (title bar,
+// close/dock buttons) and the scrolled multiline body.
+
 #include "gui_theme.h"
 #include "note_editor.h"
 #include "textbox_input.h"

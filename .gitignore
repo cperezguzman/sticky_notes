@@ -54,6 +54,10 @@ Makefile.local
 server/node_modules/
 server/dist/
 
+# React web UI (web/)
+web/node_modules/
+web/dist/
+
 # Markdown exports (regenerate with export markdown)
 exports/
 

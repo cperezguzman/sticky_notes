@@ -1,5 +1,11 @@
 #pragma once
 
+// note_store — load/save/list/open for notes/ on disk (shared by CLI and SDL GUI).
+//
+// Files: notes/next_note_id.txt and notes/note_<id>.txt (sectioned format via
+// note_file_codec). NoteIndex maps id → (title, path). The TypeScript API has a
+// parallel NoteRepository that must stay format-compatible with this module.
+
 #include "sticky_note.h"
 
 #include <map>

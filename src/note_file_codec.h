@@ -11,6 +11,7 @@ struct ParsedNoteFile {
     std::string id;
     std::string created_line;
     std::string last_edited_line;
+    std::string source_url; // optional; empty when unset
     std::string body;
 };
 

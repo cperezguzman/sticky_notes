@@ -7,7 +7,14 @@ A **C++20** sticky-notes app with two front ends over the same local store:
 
 Notes are **plain text files** under `notes/`, with a monotonic ID counter so each new note gets a stable `note_<id>.txt` filename. Both UIs share the same load/save codec and edit core; the project doubles as a learning path toward a custom GUI textbox (platform-neutral input seam → SDL adapter → multi-panel desk).
 
-Optional **TypeScript / Node HTTP API** (`server/`) is a third adapter over the same `notes/` directory — JSON list/get/create/update/delete on `127.0.0.1` without changing the C++ editor core. See [server/README.md](server/README.md).
+Optional **TypeScript / Node HTTP API** (`server/`) supports two storage modes:
+
+- **Cloud** (default when `DATABASE_URL` is set): multi-user signup, email verification, notes in PostgreSQL.
+- **Files** (`STICKY_STORAGE=files`): single-user session over local `notes/` (same as CLI/GUI).
+
+See [server/README.md](server/README.md) and [server/DEPLOY.md](server/DEPLOY.md).
+
+Optional **React web UI** (`web/`): create an account, verify email, then list/edit notes in the browser. Themes match the SDL GUI (Minimal / Retro / Cyberpunk). See [web/README.md](web/README.md).
 
 ## Requirements
 
@@ -80,6 +87,33 @@ First run **builds the image** (SDL3 + app inside Docker; may take several minut
 **GUI in Docker:** Linux with `DISPLAY` set (GNOME/KDE/X11). The script mounts `/tmp/.X11-unix` so the window appears on your desktop. macOS/Windows GUI in Docker is not supported here (use native `./scripts/setup.sh` or CLI via Docker).
 
 **No compiler on host:** Docker path only needs Docker; `cmake`/`g++` run inside the image.
+
+## Quick start (Web UI — React + cloud)
+
+Needs **Node.js 18+** and **PostgreSQL** (`DATABASE_URL`).
+
+```bash
+# Postgres (example)
+docker run --name sticky-pg -e POSTGRES_PASSWORD=sticky -e POSTGRES_DB=sticky_notes \
+  -p 5432:5432 -d postgres:16
+
+# Terminal 1 — API (cloud)
+cd server
+npm install
+export DATABASE_URL=postgres://postgres:sticky@127.0.0.1:5432/sticky_notes
+export APP_ORIGIN=http://127.0.0.1:5173
+npm run migrate
+npm start
+
+# Terminal 2 — UI
+cd web && npm install && npm run dev
+```
+
+Open http://127.0.0.1:5173 — **Create account**, check the server log for the verify link (no Resend key locally), then sign in.
+
+Deploy checklist: [server/DEPLOY.md](server/DEPLOY.md).
+
+File-only API (no Postgres): `STICKY_STORAGE=files npm start` in `server/`.
 
 ## Build
 
@@ -164,9 +198,9 @@ Unknown commands print a short error; use `help` for the full list.
 - `notes/desk_state.txt` — sidebar open flag + desk note path; optional (defaults to most recently edited note).
 - `notes/note_<id>.txt` — note file; format is sectioned text:
 
-  `Title:`, `ID:`, `Created:`, `Last Edited:`, `Body:` (each label on its own line, value on the following line(s); body is the rest of the file).
+  `Title:`, `ID:`, `Created:`, `Last Edited:`, optional `Source:` (external http(s) URL), `Body:` (each label on its own line, value on the following line(s); body is the rest of the file).
 
-Opening a note **reloads** title, id, body, and parses **Created** / **Last Edited** lines back into `std::chrono` (English month names; uses `en_US.UTF-8` locale when available). If a line is missing or invalid, that field falls back to the current time, and `last_edited` is clamped so it is not before `created`.
+Opening a note **reloads** title, id, body, optional source URL, and parses **Created** / **Last Edited** lines back into `std::chrono` (English month names; uses `en_US.UTF-8` locale when available). If a line is missing or invalid, that field falls back to the current time, and `last_edited` is clamped so it is not before `created`.
 
 ## Project layout
 
@@ -188,6 +222,8 @@ sandbox/
   textbox_main.cpp   — multi-window SDL loop (desk + floating pop-outs)
 server/
   package.json / src/ — optional TypeScript notes HTTP API (same notes/ store)
+web/
+  package.json / src/ — optional React UI (Vite; proxies to server/)
 scripts/
   build-sdl3.sh           — vendored SDL3 install (local, gitignored)
   setup.sh                — fresh-clone setup (CLI + GUI; optional --desktop)
@@ -199,7 +235,7 @@ assets/
   sticky-notes.png        — launcher icon
 tests/
   test_main.cpp         — unit tests (CLI, editor, codec, GUI logic)
-  textbox_harness.cpp   — Phase 4 integration harness (83 headless checks)
+  textbox_harness.cpp   — Phase 4 integration harness (90 headless checks)
   textbox_smoke.sh      — runs harness; mirrors manual_smoke.sh for GUI
   sdl_event_helpers.h   — synthetic SDL key/mouse events for tests
   test_notes_dir.h      — isolated temp notes/ per test scenario
@@ -243,7 +279,7 @@ Runs `tests/manual_smoke.sh` — **30 automated checks** that pipe commands into
 
 ### GUI smoke — `make textbox-smoke`
 
-Builds `textbox_test_harness` and runs `tests/textbox_smoke.sh` — **83 headless checks** that drive `sticky_gui_handle_event()` with synthetic SDL keyboard and mouse events. Covers the **Manual test checklist (GUI)** below (except visual polish and pop-out windows, which need a display). Each scenario uses an isolated temp `notes/` directory.
+Builds `textbox_test_harness` and runs `tests/textbox_smoke.sh` — **90 headless checks** that drive `sticky_gui_handle_event()` with synthetic SDL keyboard and mouse events. Covers the **Manual test checklist (GUI)** below (except visual polish and pop-out windows, which need a display). Each scenario uses an isolated temp `notes/` directory.
 
 | Scenario group | Examples |
 |----------------|----------|
@@ -255,7 +291,7 @@ Builds `textbox_test_harness` and runs `tests/textbox_smoke.sh` — **83 headles
 | **Delete file** | Ctrl+Shift+W → Y removes file (no resurrection on re-init); N/Esc cancel |
 | **Title** | F2 rename + persist; Esc cancel; whitespace → `Untitled` |
 | **Modals** | H/F1 help blocks typing; delete confirm blocks stray keys |
-| **Open / find / undo** | Ctrl+O picker (numbered list); Ctrl+F find; Ctrl+Z/Y undo/redo; F3 find next |
+| **Open / find / undo** | Ctrl+O picker; Ctrl+F find; Ctrl+K sidebar search; Ctrl+Z/Y undo/redo; F3 find next |
 | **Themes** | Ctrl+T cycle; Ctrl+1/2/3 presets; **persisted in `notes/gui_theme.txt`** |
 | **Create** | Ctrl+N + save creates `notes/note_<id>.txt` |
 | **Mouse** | Drag title bar, resize grip |
@@ -325,8 +361,9 @@ Rendering uses SDL’s debug bitmap font (`SDL_RenderDebugText`). Body lines out
 | **Ctrl+O** | Open note picker — numbered list (`1. Title`); loads from `notes/` or focuses open panel |
 | **Ctrl+S** | Save focused note (shows **Saved** toast) |
 | **Ctrl+Z** / **Ctrl+Y** | Undo / redo body edit |
-| **Ctrl+F** | Find bar — type needle, **Enter** to search |
+| **Ctrl+F** | Find bar — type needle, **Enter** to search **within** the focused note |
 | **F3** | Find next match |
+| **Ctrl+K** | Sidebar search — filter notes by title/body keyword; **Enter** keeps filter, **Esc** clears |
 | **Ctrl+N** | New note (saved to `notes/`) |
 | **Ctrl+W** | Close focused panel on desk (saves first) |
 | **Ctrl+Shift+W** | Delete note file from disk (Y/N confirm) |
@@ -355,6 +392,7 @@ On startup, opens **one note** on the desk (last saved desk note, or most recent
 
 - **Ctrl+B** or the **<** / **>** tab on the left edge toggles the sidebar.
 - Lists every saved note (most recently edited first). Highlight = on desk.
+- **Ctrl+K** (or click the search row) filters by keyword in title or body; **Esc** clears.
 - **Click** a row to show that note on the desk.
 - **Drag** a row outward to pop it out automatically.
 
@@ -404,7 +442,7 @@ Automated by `make smoke` (30 checks). Backs up and restores your `notes/` direc
 
 ## Manual test checklist (GUI)
 
-Automated by `make textbox-smoke` (83 headless checks). Run `./textbox_sandbox` on your display for visual verification, sidebar drag, and pop-out windows.
+Automated by `make textbox-smoke` (90 headless checks). Run `./textbox_sandbox` on your display for visual verification, sidebar drag, and pop-out windows.
 
 - [ ] Startup shows **one** note on desk; others listed in sidebar.
 - [ ] **Ctrl+B** toggles sidebar; **<** / **>** tab works.
@@ -417,6 +455,7 @@ Automated by `make textbox-smoke` (83 headless checks). Run `./textbox_sandbox` 
 - [ ] **Ctrl+O** opens note picker with **numbered titles**; selecting open note focuses without duplicate.
 - [ ] **Ctrl+S** saves and shows toast; **Ctrl+Z/Y** undo/redo in body.
 - [ ] **Ctrl+F** + **Enter** finds text; **F3** find next.
+- [ ] **Ctrl+K** filters sidebar by title/body; **Esc** clears search.
 - [ ] **Ctrl+T** and **Ctrl+1/2/3** switch themes; restart app — **theme persists**.
 - [ ] Desk note uses most of the main window; popped-out note reopens in compact floating size.
 - [ ] **Double-click title** or **Ctrl+Shift+P** pops note to always-on-top window.

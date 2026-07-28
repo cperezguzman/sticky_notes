@@ -623,6 +623,31 @@ void scenario_find_in_gui() {
     check(gui.find_status == "Match found", "find locates needle in body");
 }
 
+void scenario_sidebar_search_filters_notes() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(60, "Recipes", "pasta"), 40.0f,
+				   40.0f);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(61, "Travel", "japan trip"),
+				   200.0f, 40.0f);
+    sticky_gui_init(gui);
+
+    check(sticky_gui_sidebar_entry_count(gui) == 2, "sidebar lists both notes before search");
+
+    bool quit = false;
+    gui_event(gui, sdl_test::ctrl(SDL_SCANCODE_K), quit);
+    check(gui.editing_sidebar_search, "ctrl+k opens sidebar search");
+    gui_type(gui, "japan", quit);
+    check(sticky_gui_sidebar_entry_count(gui) == 1, "search filters to body match");
+    check(gui.sidebar_entries[0].title == "Travel", "matching note is Travel");
+
+    gui_event(gui, sdl_test::key_down(SDL_SCANCODE_ESCAPE), quit);
+    check(!gui.editing_sidebar_search, "esc exits sidebar search");
+    check(gui.sidebar_search_buffer.empty(), "esc clears search query");
+    check(sticky_gui_sidebar_entry_count(gui) == 2, "esc restores full sidebar list");
+}
+
 void scenario_open_picker_focuses_existing() {
     test_notes::TempNotesDir dir;
     StickyGui gui{};
@@ -675,6 +700,7 @@ int main() {
     scenario_theme_persists_on_reinit();
     scenario_undo_in_gui();
     scenario_find_in_gui();
+    scenario_sidebar_search_filters_notes();
     scenario_open_picker_focuses_existing();
     scenario_hover_focuses_panel();
     scenario_body_reflows_when_panel_widened();

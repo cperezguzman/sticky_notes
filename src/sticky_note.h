@@ -12,7 +12,7 @@ struct sticky_note {
     std::chrono::time_point<std::chrono::system_clock> last_edited = created;
     std::string title;
     std::string note_path;
-
+    std::string source_url;
 };
 
 std::string get_last_edit(const sticky_note& sn, const std::string& choice);

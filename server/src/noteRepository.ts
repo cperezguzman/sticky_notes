@@ -1,3 +1,19 @@
+/**
+ * File-backed note storage shared with the C++ CLI / SDL GUI.
+ *
+ * Reads and writes sectioned plain-text files:
+ *   notes/next_note_id.txt   — next numeric id to assign
+ *   notes/note_<id>.txt      — Title / ID / Created / Last Edited / Body sections
+ *
+ * Parsing and serialization are delegated to `noteCodec.ts` so the on-disk
+ * format stays byte-compatible with `src/note_file_codec.cpp`.
+ *
+ * ## Concurrency
+ *
+ * There is no locking. If the CLI, GUI, and API edit the same file at once,
+ * **last write wins**. That matches the learning-project scope (local single user).
+ */
+
 import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -8,11 +24,16 @@ import {
   serializeNoteFile,
   type NoteJson,
 } from "./noteCodec.js";
+import { noteMatchesQuery } from "./noteSearch.js";
 
+/** Lightweight row for the sidebar list (no body text). */
 export interface NoteIndexEntry {
   id: number;
   title: string;
+  /** Absolute path to the note file on disk. */
   path: string;
+  /** External context URL if set. */
+  sourceUrl: string;
 }
 
 export class NoteRepository {
@@ -26,6 +47,10 @@ export class NoteRepository {
     return join(this.notesDir, `note_${id}.txt`);
   }
 
+  /**
+   * Create the notes directory and seed `next_note_id.txt` with `0` if missing.
+   * Safe to call repeatedly (idempotent).
+   */
   async ensureDataDir(): Promise<void> {
     await mkdir(this.notesDir, { recursive: true });
     try {
@@ -35,7 +60,13 @@ export class NoteRepository {
     }
   }
 
-  async list(): Promise<NoteIndexEntry[]> {
+  /**
+   * Scan `note_*.txt` files, parse metadata, return sorted by id.
+   * Skips unreadable / malformed files instead of failing the whole list.
+   * When `query` is non-blank, keeps notes whose title or body contains it
+   * (case-insensitive substring).
+   */
+  async list(query?: string): Promise<NoteIndexEntry[]> {
     await this.ensureDataDir();
     const entries = await readdir(this.notesDir, { withFileTypes: true });
     const index: NoteIndexEntry[] = [];
@@ -54,13 +85,22 @@ export class NoteRepository {
       if (Number.isNaN(id)) {
         continue;
       }
-      index.push({ id, title: parsed.title, path });
+      if (!noteMatchesQuery(parsed.title, parsed.body, query ?? "", parsed.sourceUrl)) {
+        continue;
+      }
+      index.push({
+        id,
+        title: parsed.title,
+        path,
+        sourceUrl: parsed.sourceUrl,
+      });
     }
 
     index.sort((a, b) => a.id - b.id);
     return index;
   }
 
+  /** Load a single note by numeric id, or null if the file is missing / invalid. */
   async getById(id: number): Promise<NoteJson | null> {
     await this.ensureDataDir();
     const path = this.notePath(id);
@@ -77,6 +117,10 @@ export class NoteRepository {
     return parsedToNoteJson(parsed, path);
   }
 
+  /**
+   * Read `next_note_id.txt`, return that id, then write id+1.
+   * Ids are never reused after delete (gaps are fine).
+   */
   private async allocateId(): Promise<number> {
     await this.ensureDataDir();
     let raw: string;
@@ -93,7 +137,11 @@ export class NoteRepository {
     return id;
   }
 
-  async create(title: string, body = ""): Promise<NoteJson> {
+  /**
+   * Create a new note file with fresh Created / Last Edited timestamps.
+   * Empty title becomes `"Untitled"`. Body is normalized to end with `\n`.
+   */
+  async create(title: string, body = "", sourceUrl = ""): Promise<NoteJson> {
     const id = await this.allocateId();
     const nowCreated = formatTimestampLine("created");
     const nowEdited = formatTimestampLine("lastEdited");
@@ -106,6 +154,7 @@ export class NoteRepository {
       createdLine: nowCreated,
       lastEditedLine: nowEdited,
       body: bodyText,
+      sourceUrl,
     });
     await writeFile(path, fileText, "utf8");
     const note = await this.getById(id);
@@ -115,16 +164,20 @@ export class NoteRepository {
     return note;
   }
 
+  /**
+   * Patch title and/or body. Preserves the original Created line from disk;
+   * always refreshes Last Edited to “now”.
+   */
   async update(
     id: number,
-    patch: { title?: string; body?: string },
+    patch: { title?: string; body?: string; sourceUrl?: string },
   ): Promise<NoteJson | null> {
     const existing = await this.getById(id);
     if (!existing) {
       return null;
     }
 
-    // Preserve original Created value line from disk
+    // Re-read raw file so we keep the exact Created value line
     const path = this.notePath(id);
     const raw = await readFile(path, "utf8");
     const parsed = parseNoteFile(raw);
@@ -142,6 +195,8 @@ export class NoteRepository {
     if (body !== "" && !body.endsWith("\n")) {
       body += "\n";
     }
+    const sourceUrl =
+      patch.sourceUrl !== undefined ? patch.sourceUrl : existing.sourceUrl;
 
     const fileText = serializeNoteFile({
       title,
@@ -149,11 +204,13 @@ export class NoteRepository {
       createdLine: parsed.createdLine || formatTimestampLine("created"),
       lastEditedLine: formatTimestampLine("lastEdited"),
       body,
+      sourceUrl,
     });
     await writeFile(path, fileText, "utf8");
     return this.getById(id);
   }
 
+  /** Delete `note_<id>.txt`. Returns false if the file was already gone. */
   async delete(id: number): Promise<boolean> {
     await this.ensureDataDir();
     try {

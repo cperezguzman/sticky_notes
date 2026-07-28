@@ -1,96 +1,96 @@
 # Sticky Notes API (TypeScript)
 
-Local **Node.js / TypeScript** HTTP adapter over the same `notes/` directory used by the C++ CLI and SDL GUI. Local files remain the source of truth; this process only reads and writes sectioned `note_<id>.txt` files (same format as `note_file_codec`).
+Express HTTP API for Sticky Notes.
 
-Binds **`127.0.0.1` only**. No auth. Concurrent CLI/GUI/API editors: **last write wins** per file.
+## Storage modes
 
-## Setup
+| Mode | When | Data |
+|------|------|------|
+| **cloud** | `DATABASE_URL` set (default) | PostgreSQL users + notes (UUID) |
+| **files** | `STICKY_STORAGE=files` or no `DATABASE_URL` | Local `notes/*.txt` + `auth.json` |
+
+Cloud mode is the product path (signup → verify email → notes in Postgres).  
+Files mode keeps compatibility with the C++ CLI/GUI disk layout.
+
+Production deploy: **[DEPLOY.md](DEPLOY.md)**. Desktop sync later: **ADR-003**.
+
+## Setup (cloud)
 
 ```bash
 cd server
 npm install
-```
-
-## Run
-
-From `server/` (default notes dir is `../notes` at the repo root):
-
-```bash
+export DATABASE_URL=postgres://postgres:sticky@127.0.0.1:5432/sticky_notes
+export APP_ORIGIN=http://127.0.0.1:5173
+npm run migrate
 npm start
 ```
 
-Optional env:
+Without `RESEND_API_KEY`, verification links are printed to the console.
+
+## Setup (files)
+
+```bash
+cd server
+STICKY_STORAGE=files npm start
+```
+
+Default file login: `admin` / `sticky-notes` (created in `notes/auth.json` on first run).
+
+## Env
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `NOTES_DIR` | `../notes` (resolved from `server/`) | Path to the notes directory |
-| `HOST` | `127.0.0.1` | Bind address |
-| `PORT` | `8787` | Listen port |
+| `DATABASE_URL` | — | Enables cloud mode |
+| `STICKY_STORAGE` | auto | `cloud` or `files` |
+| `STICKY_AUTH` | `on` | `off` disables session gate |
+| `STICKY_SESSION_SECRET` | auto / file | Cookie signing |
+| `APP_ORIGIN` | `http://127.0.0.1:5173` | Base URL for verify links |
+| `RESEND_API_KEY` / `EMAIL_FROM` | unset / Resend default | Email delivery |
+| `HOST` / `PORT` | `127.0.0.1` / `8787` | Listen (use `HOST=0.0.0.0` in prod) |
 
-```bash
-NOTES_DIR=/tmp/my-notes PORT=9000 npm start
-```
-
-## Endpoints
+## Auth endpoints
 
 | Method | Path | Body | Result |
 |--------|------|------|--------|
-| `GET` | `/health` | — | `{ "ok": true }` |
-| `GET` | `/notes` | — | `[{ id, title, path }, ...]` |
-| `GET` | `/notes/:id` | — | Full note JSON |
-| `POST` | `/notes` | `{ "title"?, "body"? }` | Create note (201) |
-| `PUT` | `/notes/:id` | `{ "title"?, "body"? }` | Update note |
-| `DELETE` | `/notes/:id` | — | Remove file (204) |
+| `POST` | `/auth/signup` | `{ email, password }` | Create user + send verify (cloud) |
+| `GET` | `/auth/verify?token=` | — | Mark email verified |
+| `POST` | `/auth/login` | `{ email, password }` | Session cookie |
+| `POST` | `/auth/logout` | — | Clear session |
+| `GET` | `/auth/me` | — | Current user |
 
-Note JSON shape:
+## Notes endpoints (auth required when enabled)
 
-```json
-{
-  "id": 3,
-  "title": "Interview prep",
-  "created": "June 20, 2026 at 10:39 PM",
-  "lastEdited": "July 22, 2026 at 02:05 PM",
-  "body": "line one\nline two\n",
-  "path": "/…/notes/note_3.txt"
-}
-```
+Same paths as before. Cloud note `id` is a **UUID** string. Files mode uses integer ids.
 
-## Example curls
+| Method | Path | Notes |
+|--------|------|--------|
+| `GET` | `/notes` | List index entries |
+| `GET` | `/notes?q=` | Case-insensitive substring search over **title + body + sourceUrl** |
+| `GET` | `/notes/:id` | Full note (includes `sourceUrl`) |
+| `POST` | `/notes` | Create (`title`, `body`, optional `sourceUrl`) |
+| `PUT` | `/notes/:id` | Update title/body/`sourceUrl` |
+| `DELETE` | `/notes/:id` | Delete |
 
-```bash
-curl -s http://127.0.0.1:8787/health
-
-curl -s http://127.0.0.1:8787/notes
-
-curl -s -X POST http://127.0.0.1:8787/notes \
-  -H 'Content-Type: application/json' \
-  -d '{"title":"From API","body":"hello from TypeScript\n"}'
-
-curl -s http://127.0.0.1:8787/notes/0
-
-curl -s -X PUT http://127.0.0.1:8787/notes/0 \
-  -H 'Content-Type: application/json' \
-  -d '{"body":"updated body\n"}'
-
-curl -s -o /dev/null -w '%{http_code}\n' -X DELETE http://127.0.0.1:8787/notes/0
-```
+`sourceUrl` is an optional http(s) URL for **reverse context links** (Open source). Empty string clears it. Cloud mode also stores `source_domain` for a future browser-extension resurfacing feature.
 
 ## Tests
 
 ```bash
-cd server
-npm test
+npm test                          # file tests; cloud skipped without DATABASE_URL
+DATABASE_URL=... npm test         # includes tenant isolation + verify token
 ```
-
-Uses the repo fixture `tests/fixtures/note_sample.txt` plus a temp `notes/` dir for repository CRUD.
 
 ## Layout
 
 ```text
 server/
+  migrations/001_init.sql
   src/
-    index.ts           — listen on 127.0.0.1
-    noteCodec.ts       — parse/serialize (port of note_file_codec)
-    noteRepository.ts  — list/get/create/update/delete + next_note_id
-    routes/notes.ts    — REST handlers
+    index.ts
+    db.ts / migrate.ts
+    auth/                 — file-mode auth.json helpers + requireAuth
+    cloud/                — UserStore, PostgresNoteRepository, email
+    routes/auth.ts
+    routes/notes.ts
+  DEPLOY.md
 ```
