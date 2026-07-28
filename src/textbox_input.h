@@ -38,6 +38,12 @@ bool textbox_apply_key(EditorSession& session, TextboxKeyEvent event, std::size_
 
 void textbox_init_hard_breaks_for_loaded_note(EditorSession& session);
 
+// Join lines that look like soft-wrap artifacts from older saves (mid-word / after-space).
+void textbox_repair_persisted_soft_wraps(std::vector<std::string>& lines);
+
+// Hard-break paragraphs only — suitable for writing Body: to disk (no soft wraps).
+std::vector<std::string> textbox_storage_lines(const EditorSession& session);
+
 void textbox_enforce_wrap(EditorSession& session, std::size_t max_columns);
 
 std::size_t textbox_line_count(const EditorSession& session);
@@ -54,3 +60,10 @@ std::string textbox_line_text(const EditorSession& session);
 // Keep cursor row inside the visible window (call after key handling).
 void textbox_scroll_to_cursor(TextboxViewport& viewport, const EditorSession& session,
 			      std::size_t visible_line_count);
+
+// Clamp scroll after reflow/resize. If content fits, snap to the start.
+void textbox_clamp_viewport(TextboxViewport& viewport, const EditorSession& session,
+			    std::size_t visible_line_count);
+
+// Show the beginning of the note (used when the panel shrinks).
+void textbox_pin_viewport_to_start(TextboxViewport& viewport);

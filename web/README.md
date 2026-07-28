@@ -38,9 +38,10 @@ Same three presets as the SDL GUI: **Minimal**, **Retro**, **Cyberpunk**.
 
 Sidebar **Search notes…** filters the list by keyword in **title, body, or source URL** (API `GET /notes?q=`). Debounced ~200ms. **Ctrl+K** focuses the search box.
 
-## Context links (reverse)
+## Context links
 
-Optional **Source URL** on each note — the page that prompted the note. **Open source** opens it in a new tab. Sidebar shows ↗ when a note has a link. Forward resurfacing (site → note) needs a browser extension later.
+- **Reverse:** optional **Source URL** on each note — **Open source** opens it.
+- **Forward:** Chromium extension under [`extension/`](../extension/README.md) resurfaces notes when you visit a matching page/domain. Sidebar shows ↗ when a note has a link.
 
 ## Scripts
 

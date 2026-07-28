@@ -1,5 +1,6 @@
 #include "textbox_input.h"
 
+#include <cctype>
 #include <utility>
 
 namespace {
@@ -81,6 +82,69 @@ void textbox_init_hard_breaks_for_loaded_note(EditorSession& session) {
     }
 }
 
+void textbox_repair_persisted_soft_wraps(std::vector<std::string>& lines) {
+    if (lines.size() < 2) {
+	return;
+    }
+
+    std::vector<std::string> out;
+    out.reserve(lines.size());
+    out.push_back(lines[0]);
+
+    for (std::size_t i = 1; i < lines.size(); ++i) {
+	const std::string& cur = lines[i];
+	std::string& prev = out.back();
+	if (prev.empty() || cur.empty()) {
+	    out.push_back(cur);
+	    continue;
+	}
+
+	const unsigned char prev_last = static_cast<unsigned char>(prev.back());
+	const unsigned char cur_first = static_cast<unsigned char>(cur.front());
+	const bool mid_word = std::isalnum(prev_last) != 0 && std::isalnum(cur_first) != 0;
+	const bool after_space = prev_last == ' ';
+	const bool leading_space = cur_first == ' ';
+	constexpr std::size_t kLikelyWrapCols = 60;
+	const bool wrapped_paragraph = prev.size() >= kLikelyWrapCols
+	    && std::islower(cur_first) != 0;
+	if (mid_word || after_space || leading_space || wrapped_paragraph) {
+	    prev += cur;
+	} else {
+	    out.push_back(cur);
+	}
+    }
+
+    lines = std::move(out);
+}
+
+std::vector<std::string> textbox_storage_lines(const EditorSession& session) {
+    std::vector<std::string> out;
+    if (session.note.text.empty()) {
+	out.emplace_back("");
+	return out;
+    }
+
+    const bool have_breaks = session.hard_line_break_after.size() == session.note.text.size();
+    if (!have_breaks) {
+	return session.note.text;
+    }
+
+    std::string para;
+    for (std::size_t i = 0; i < session.note.text.size(); ++i) {
+	para += session.note.text[i];
+	const bool hard = session.hard_line_break_after[i];
+	const bool last = i + 1 >= session.note.text.size();
+	if (hard || last) {
+	    out.push_back(para);
+	    para.clear();
+	}
+    }
+    if (out.empty()) {
+	out.emplace_back("");
+    }
+    return out;
+}
+
 void textbox_enforce_wrap(EditorSession& session, std::size_t max_columns) {
     if (max_columns == 0) {
 	return;
@@ -124,10 +188,27 @@ void textbox_enforce_wrap(EditorSession& session, std::size_t max_columns) {
 	    new_lines.emplace_back("");
 	    new_breaks.push_back(hard_end);
 	} else {
-	    for (std::size_t pos = 0; pos < para.size(); pos += max_columns) {
-		const bool last_seg = pos + max_columns >= para.size();
-		new_lines.push_back(para.substr(pos, max_columns));
-		new_breaks.push_back(last_seg ? hard_end : false);
+	    std::size_t pos = 0;
+	    while (pos < para.size()) {
+		const std::size_t remain = para.size() - pos;
+		if (remain <= max_columns) {
+		    new_lines.push_back(para.substr(pos));
+		    new_breaks.push_back(hard_end);
+		    break;
+		}
+
+		std::size_t break_at = max_columns;
+		const std::size_t space = para.rfind(' ', pos + max_columns - 1);
+		if (space != std::string::npos && space >= pos) {
+		    break_at = space - pos + 1; // keep trailing space on this line
+		    if (break_at == 0) {
+			break_at = max_columns;
+		    }
+		}
+
+		new_lines.push_back(para.substr(pos, break_at));
+		new_breaks.push_back(false);
+		pos += break_at;
 	    }
 	}
 	i = j + 1;
@@ -246,10 +327,37 @@ std::string textbox_line_text(const EditorSession& session) {
     return textbox_line_at(session, textbox_cursor_line(session));
 }
 
-void textbox_scroll_to_cursor(TextboxViewport& viewport, const EditorSession& session,
-			      std::size_t visible_line_count) {
+void textbox_clamp_viewport(TextboxViewport& viewport, const EditorSession& session,
+			    std::size_t visible_line_count) {
     if (visible_line_count == 0) {
 	visible_line_count = 1;
+    }
+
+    const std::size_t line_count = textbox_line_count(session);
+    if (line_count <= visible_line_count) {
+	viewport.first_visible_line = 0;
+	return;
+    }
+    const std::size_t max_first = line_count - visible_line_count;
+    if (viewport.first_visible_line > max_first) {
+	viewport.first_visible_line = max_first;
+    }
+}
+
+void textbox_pin_viewport_to_start(TextboxViewport& viewport) {
+    viewport.first_visible_line = 0;
+}
+
+void textbox_scroll_to_cursor(TextboxViewport& viewport, const EditorSession& session,
+			      std::size_t visible_line_count) {
+    textbox_clamp_viewport(viewport, session, visible_line_count);
+    if (visible_line_count == 0) {
+	visible_line_count = 1;
+    }
+
+    const std::size_t line_count = textbox_line_count(session);
+    if (line_count <= visible_line_count) {
+	return;
     }
 
     const std::size_t cursor_line = textbox_cursor_line(session);

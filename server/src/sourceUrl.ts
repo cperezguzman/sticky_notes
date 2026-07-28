@@ -1,6 +1,7 @@
 /**
- * Source URL helpers for context-linked notes (reverse link: note → page).
- * Only http(s) URLs are accepted so “Open source” is safe to hand to a browser.
+ * Source URL helpers for context-linked notes.
+ * Reverse: note → page (“Open source”).
+ * Forward: page → notes (extension resurfacing by exact URL / domain).
  */
 
 export function normalizeSourceUrl(
@@ -33,8 +34,59 @@ export function sourceDomainFromUrl(url: string): string {
     return "";
   }
   try {
-    return new URL(url).hostname.toLowerCase();
+    return normalizeDomain(new URL(url).hostname);
   } catch {
     return "";
   }
+}
+
+/** Lowercase host; strip a leading `www.` so domain resurfacing is forgiving. */
+export function normalizeDomain(host: string): string {
+  const h = host.trim().toLowerCase();
+  return h.startsWith("www.") ? h.slice(4) : h;
+}
+
+/** Exact page match ignoring URL hash. */
+export function urlsMatchExact(a: string, b: string): boolean {
+  try {
+    const ua = new URL(a);
+    const ub = new URL(b);
+    ua.hash = "";
+    ub.hash = "";
+    return ua.href === ub.href;
+  } catch {
+    return false;
+  }
+}
+
+export type ContextMatchKind = "exact" | "domain";
+
+export interface ContextNoteHit {
+  id: string | number;
+  title: string;
+  sourceUrl: string;
+  match: ContextMatchKind;
+}
+
+export function rankContextHits(
+  notes: { id: string | number; title: string; sourceUrl: string }[],
+  pageUrl: string,
+): ContextNoteHit[] {
+  const domain = sourceDomainFromUrl(pageUrl);
+  if (!domain) {
+    return [];
+  }
+  const exact: ContextNoteHit[] = [];
+  const byDomain: ContextNoteHit[] = [];
+  for (const note of notes) {
+    if (!note.sourceUrl) {
+      continue;
+    }
+    if (urlsMatchExact(note.sourceUrl, pageUrl)) {
+      exact.push({ ...note, match: "exact" });
+    } else if (sourceDomainFromUrl(note.sourceUrl) === domain) {
+      byDomain.push({ ...note, match: "domain" });
+    }
+  }
+  return [...exact, ...byDomain];
 }

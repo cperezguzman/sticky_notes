@@ -19,8 +19,10 @@ import {
   loadOrCreateAuth,
   loadOrCreateSessionSecret,
 } from "./auth/store.js";
+import { hydrateExtensionSession } from "./auth/extensionSession.js";
 import { requireAuth } from "./auth/middleware.js";
 import { PostgresNoteRepository } from "./cloud/postgresNoteRepository.js";
+import { isAllowedCorsOrigin } from "./cors.js";
 import { UserStore } from "./cloud/userStore.js";
 import { getPool, resolveStorageMode, runMigrations } from "./db.js";
 import { NoteRepository } from "./noteRepository.js";
@@ -30,6 +32,15 @@ import { createCloudNotesRouter, createNotesRouter } from "./routes/notes.js";
 const HOST = process.env.HOST ?? "127.0.0.1";
 const PORT = Number.parseInt(process.env.PORT ?? "8787", 10);
 const NODE_ENV = process.env.NODE_ENV ?? "development";
+const IS_LOCALHOST_HOST = HOST === "127.0.0.1" || HOST === "localhost";
+const SESSION_SAMESITE =
+  process.env.STICKY_SESSION_SAMESITE ??
+  (IS_LOCALHOST_HOST ? "none" : "lax");
+// Firefox requires Secure when SameSite=None; localhost is exempt.
+const SESSION_SECURE =
+  process.env.STICKY_SESSION_SECURE ??
+  (SESSION_SAMESITE === "none" ? "true" : String(NODE_ENV === "production"));
+const SESSION_SECURE_BOOL = SESSION_SECURE === "true";
 
 function defaultNotesDir(): string {
   const serverRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -62,14 +73,17 @@ async function main(): Promise<void> {
   }
   app.use((req, res, next) => {
     const origin = req.headers.origin;
-    if (origin && corsOrigins.has(origin)) {
+    if (isAllowedCorsOrigin(origin, corsOrigins)) {
       res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Access-Control-Allow-Credentials", "true");
       res.setHeader(
         "Access-Control-Allow-Methods",
         "GET,POST,PUT,DELETE,OPTIONS",
       );
-      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      res.setHeader(
+        "Access-Control-Allow-Headers",
+        "Content-Type, Authorization, X-Sticky-Client",
+      );
     }
     if (req.method === "OPTIONS") {
       res.status(204).end();
@@ -98,12 +112,14 @@ async function main(): Promise<void> {
         saveUninitialized: false,
         cookie: {
           httpOnly: true,
-          sameSite: "lax",
-          secure: NODE_ENV === "production",
+          sameSite: SESSION_SAMESITE as "lax" | "none" | "strict",
+          secure: SESSION_SECURE_BOOL,
           maxAge: 7 * 24 * 60 * 60 * 1000,
         },
       }),
     );
+
+    app.use(hydrateExtensionSession);
 
     const users = new UserStore(getPool());
     const notes = new PostgresNoteRepository(getPool());
@@ -122,12 +138,13 @@ async function main(): Promise<void> {
         saveUninitialized: false,
         cookie: {
           httpOnly: true,
-          sameSite: "lax",
-          secure: false,
+          sameSite: SESSION_SAMESITE as "lax" | "none" | "strict",
+          secure: SESSION_SECURE_BOOL,
           maxAge: 7 * 24 * 60 * 60 * 1000,
         },
       }),
     );
+    app.use(hydrateExtensionSession);
     app.use("/auth", createAuthRouter({ mode: "files", fileAuth: authRecord }));
     app.use("/notes", requireAuth, createNotesRouter(repo));
   }

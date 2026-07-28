@@ -9,6 +9,7 @@ import { Router, type Request, type Response } from "express";
 
 import type { AuthRecord } from "../auth/store.js";
 import { isAuthEnabled, verifyPassword } from "../auth/store.js";
+import { respondWithOptionalExtensionSession } from "../auth/extensionSession.js";
 import { sendVerifyEmail } from "../cloud/email.js";
 import type { UserStore } from "../cloud/userStore.js";
 
@@ -202,7 +203,7 @@ export function createAuthRouter(options: {
       req.session.userId = user.id;
       req.session.email = user.email;
       delete req.session.user;
-      res.json({
+      respondWithOptionalExtensionSession(req, res, {
         ok: true,
         authRequired: true,
         user: user.email,
@@ -235,7 +236,7 @@ export function createAuthRouter(options: {
     req.session.user = fileAuth.username;
     delete req.session.userId;
     delete req.session.email;
-    res.json({
+    respondWithOptionalExtensionSession(req, res, {
       ok: true,
       authRequired: true,
       user: fileAuth.username,

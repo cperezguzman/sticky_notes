@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Sticky Notes Context — Options</title>
+    <link rel="stylesheet" href="popup.css" />
+    <style>
+      body {
+        width: auto;
+        max-width: 28rem;
+        margin: 1rem auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Extension options</h1>
+    <p class="muted">
+      Point at your Sticky Notes API. Sign in from the popup (session cookie is
+      stored for this API host).
+    </p>
+    <label>
+      API base URL
+      <input id="apiBase" type="url" />
+    </label>
+    <label>
+      Web app URL (for “open note”)
+      <input id="webBase" type="url" />
+    </label>
+    <button id="save" type="button">Save</button>
+    <p id="saved" class="muted"></p>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

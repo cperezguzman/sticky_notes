@@ -2,7 +2,11 @@ import type pg from "pg";
 
 import { formatTs } from "./userStore.js";
 import { ilikeContainsPattern } from "../noteSearch.js";
-import { sourceDomainFromUrl } from "../sourceUrl.js";
+import {
+  rankContextHits,
+  sourceDomainFromUrl,
+  type ContextNoteHit,
+} from "../sourceUrl.js";
 
 /** Cloud note JSON — UUID id (plan lock). */
 export interface CloudNoteJson {
@@ -74,6 +78,26 @@ export class PostgresNoteRepository {
       title: row.title as string,
       sourceUrl: (row.source_url as string) ?? "",
     }));
+  }
+
+  async listByContext(userId: string, pageUrl: string): Promise<ContextNoteHit[]> {
+    const domain = sourceDomainFromUrl(pageUrl);
+    if (!domain) {
+      return [];
+    }
+    const r = await this.pool.query(
+      `SELECT id, title, source_url FROM notes
+       WHERE user_id = $1
+         AND regexp_replace(lower(source_domain), '^www\\.', '') = $2
+       ORDER BY updated_at DESC`,
+      [userId, domain],
+    );
+    const rows = r.rows.map((row) => ({
+      id: row.id as string,
+      title: row.title as string,
+      sourceUrl: (row.source_url as string) ?? "",
+    }));
+    return rankContextHits(rows, pageUrl);
   }
 
   async getById(userId: string, id: string): Promise<CloudNoteJson | null> {

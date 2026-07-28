@@ -110,6 +110,7 @@ StickyPanel make_panel_from_note(const sticky_note& note, float x, float y) {
     if (panel.session.note.text.empty()) {
 	panel.session.note.text.push_back("");
     }
+    textbox_repair_persisted_soft_wraps(panel.session.note.text);
     editor_reset_cursor(panel.session);
     editor_clear_history(panel.session);
     textbox_init_hard_breaks_for_loaded_note(panel.session);
@@ -584,10 +585,15 @@ void persist_panel_if_possible(StickyPanel& panel) {
 	    ? "Untitled"
 	    : panel.session.note.title;
 	sticky_note created = create_note_silent(title);
-	created.text = panel.session.note.text;
+	created.text = textbox_storage_lines(panel.session);
 	panel.session.note = created;
+	textbox_init_hard_breaks_for_loaded_note(panel.session);
+	save_note(panel.session.note);
+	return;
     }
-    save_note(panel.session.note);
+    sticky_note to_save = panel.session.note;
+    to_save.text = textbox_storage_lines(panel.session);
+    save_note(to_save);
 }
 
 void trigger_save_toast(StickyGui& gui) {
@@ -736,7 +742,9 @@ void commit_title_edit(StickyGui& gui) {
     StickyPanel& panel = gui.panels[gui.focused];
     set_title(panel.session.note, title);
     if (!panel.session.note.note_path.empty()) {
-	save_note(panel.session.note);
+	sticky_note to_save = panel.session.note;
+	to_save.text = textbox_storage_lines(panel.session);
+	save_note(to_save);
     }
     cancel_title_edit(gui);
 }
@@ -1341,6 +1349,7 @@ bool handle_mouse(StickyGui& gui, const SDL_Event& event, SDL_Window* desk_windo
 	    if (gui.interaction == StickyGui::Interaction::Resize) {
 		panel.width = std::max(kMinPanelW, mx - panel.x);
 		panel.height = std::max(kMinPanelH, my - panel.y);
+		sticky_gui_reflow_panel(gui, gui.active_panel);
 		return true;
 	    }
 	    return false;
@@ -1367,6 +1376,9 @@ bool handle_mouse(StickyGui& gui, const SDL_Event& event, SDL_Window* desk_windo
 
     if (event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
 	if (gui.interaction != StickyGui::Interaction::None) {
+	    if (gui.interaction == StickyGui::Interaction::Resize) {
+		sticky_gui_reflow_panel(gui, gui.active_panel);
+	    }
 	    if (gui.interaction == StickyGui::Interaction::Drag) {
 		StickyPanel& dragged = gui.panels[gui.active_panel];
 		const float dx = dragged.x - gui.title_drag_start_x;
@@ -1581,7 +1593,9 @@ void sticky_gui_init(StickyGui& gui) {
 void sticky_gui_save_all(const StickyGui& gui) {
     for (const StickyPanel& panel : gui.panels) {
 	if (!panel.session.note.note_path.empty()) {
-	    save_note(panel.session.note);
+	    sticky_note to_save = panel.session.note;
+	    to_save.text = textbox_storage_lines(panel.session);
+	    save_note(to_save);
 	}
     }
     desk_state_save(gui);
@@ -1606,6 +1620,7 @@ void sticky_gui_reflow_panel(StickyGui& gui, std::size_t panel_index) {
     }
     StickyPanel& panel = gui.panels[panel_index];
     textbox_enforce_wrap(panel.session, textbox_body_max_columns(panel.width));
+    textbox_pin_viewport_to_start(panel.viewport);
 }
 
 void sticky_gui_render(SDL_Renderer* renderer, StickyGui& gui) {
@@ -1730,8 +1745,14 @@ bool sticky_gui_handle_event(StickyGui& gui, const SDL_Event& event, bool& quit_
 	return false;
     }
 
-    return textbox_handle_sdl_event(gui.panels[gui.focused].session, event, quit_requested,
-				    textbox_body_max_columns(gui.panels[gui.focused].width));
+    StickyPanel& panel = gui.panels[gui.focused];
+    const bool handled = textbox_handle_sdl_event(panel.session, event, quit_requested,
+						  textbox_body_max_columns(panel.width));
+    if (handled) {
+	textbox_scroll_to_cursor(panel.viewport, panel.session,
+				 textbox_visible_body_lines(panel.height));
+    }
+    return handled;
 }
 
 void sticky_gui_reset(StickyGui& gui) {

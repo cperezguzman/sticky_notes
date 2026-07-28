@@ -14,7 +14,7 @@ Optional **TypeScript / Node HTTP API** (`server/`) supports two storage modes:
 
 See [server/README.md](server/README.md) and [server/DEPLOY.md](server/DEPLOY.md).
 
-Optional **React web UI** (`web/`): create an account, verify email, then list/edit notes in the browser. Themes match the SDL GUI (Minimal / Retro / Cyberpunk). See [web/README.md](web/README.md).
+Optional **React web UI** (`web/`): create an account, verify email, then list/edit notes in the browser. Themes match the SDL GUI (Minimal / Retro / Cyberpunk). See [web/README.md](web/README.md). Optional **browser extension** (`extension/`) resurfaces notes when you visit a linked site (Firefox or Chromium) — see [extension/README.md](extension/README.md).
 
 ## Requirements
 
@@ -114,6 +114,17 @@ Open http://127.0.0.1:5173 — **Create account**, check the server log for the 
 Deploy checklist: [server/DEPLOY.md](server/DEPLOY.md).
 
 File-only API (no Postgres): `STICKY_STORAGE=files npm start` in `server/`.
+
+### Firefox extension note
+
+The browser extension works on Firefox, but the final auth path is **not** "just reuse the web cookie":
+
+- Firefox MV3 currently needs `background.scripts` alongside `background.service_worker`.
+- The extension popup originally failed CORS because `moz-extension://...` was not in the API allowlist.
+- After CORS was fixed, Firefox still did not reliably keep/send the local API session cookie from the popup.
+- Final design: the extension logs in through `/auth/login`, receives a `sessionToken`, stores it in extension local storage, and sends it back as `Authorization: Bearer ...`.
+
+See [extension/README.md](extension/README.md) and [server/README.md](server/README.md) for the full debugging story and final architecture.
 
 ## Build
 
@@ -224,6 +235,8 @@ server/
   package.json / src/ — optional TypeScript notes HTTP API (same notes/ store)
 web/
   package.json / src/ — optional React UI (Vite; proxies to server/)
+extension/
+  manifest.json / … — optional browser extension (Firefox or Chromium; forward context resurfacing)
 scripts/
   build-sdl3.sh           — vendored SDL3 install (local, gitignored)
   setup.sh                — fresh-clone setup (CLI + GUI; optional --desktop)
@@ -258,14 +271,14 @@ All test commands run from the project root. **GUI tests do not open a window** 
 
 ### Unit tests — `make test`
 
-Builds `test_runner` and runs **35 unit test functions** covering:
+Builds `test_runner` and runs **40 unit test functions** covering:
 
 | Area | What is checked |
 |------|-----------------|
 | **Parser / codec** | `parse_command`, `parse_note_file` (fixture + malformed) |
 | **Timestamps** | `parse_saved_timestamp_line` round-trip and rejection |
 | **Editor core** | insert, erase, movement, undo, find wrap, yank/paste, lines |
-| **textbox_input** | init, typing, backspace, multiline Enter, line merge, **wrap/reflow** |
+| **textbox_input** | init, typing, backspace, multiline Enter, line merge, **wrap/reflow**, word-boundary wrap, storage-line collapse, soft-wrap file repair, viewport reset when content fits after resize |
 | **note_store** | `delete_note_file` |
 | **gui_theme** | theme save/load roundtrip (`notes/gui_theme.txt`) |
 | **sticky_gui** | focus z-order, delete confirm (no re-save after Y), hit targets, F2 title edit, help/delete modals block body input |
@@ -463,6 +476,10 @@ Automated by `make textbox-smoke` (90 headless checks). Run `./textbox_sandbox` 
 - [ ] **Ctrl+W** / title-bar **x** closes desk panel (saves first).
 - [ ] **Ctrl+Shift+W** → Y deletes file from disk; N/Esc cancels.
 - [ ] **H** / **F1** help overlay; **Esc** on desk quits and saves all notes with paths.
+
+## License
+
+**All rights reserved** — see [LICENSE](LICENSE). This is not an open-source license; viewing or forking the public GitHub repo does not grant permission to reuse the code in other products.
 
 ## Limitations
 

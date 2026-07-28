@@ -18,6 +18,8 @@ bool textbox_handle_sdl_event(EditorSession& session, const SDL_Event& event, bo
 
 std::size_t textbox_body_max_columns(float panel_width);
 
+std::size_t textbox_visible_body_lines(float panel_height);
+
 // Sticky-note panel: title bar + multiline body (clipped / scrolled via viewport).
 float sticky_panel_title_bar_height();
 

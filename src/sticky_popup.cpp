@@ -32,18 +32,53 @@ void persist_panel(StickyPanel& panel) {
 	    ? "Untitled"
 	    : panel.session.note.title;
 	sticky_note created = create_note_silent(title);
-	created.text = panel.session.note.text;
+	created.text = textbox_storage_lines(panel.session);
 	panel.session.note = created;
+	textbox_init_hard_breaks_for_loaded_note(panel.session);
+	save_note(panel.session.note);
+	return;
     }
-    save_note(panel.session.note);
+    sticky_note to_save = panel.session.note;
+    to_save.text = textbox_storage_lines(panel.session);
+    save_note(to_save);
+}
+
+bool read_popup_render_size(StickyPopupEntry& entry, float& out_w, float& out_h) {
+    int w = 0;
+    int h = 0;
+    if (entry.renderer != nullptr && SDL_GetRenderOutputSize(entry.renderer, &w, &h)) {
+	out_w = static_cast<float>(w);
+	out_h = static_cast<float>(h);
+	return true;
+    }
+    if (entry.window != nullptr && SDL_GetWindowSizeInPixels(entry.window, &w, &h)) {
+	out_w = static_cast<float>(w);
+	out_h = static_cast<float>(h);
+	return true;
+    }
+    if (entry.window != nullptr && SDL_GetWindowSize(entry.window, &w, &h)) {
+	out_w = static_cast<float>(w);
+	out_h = static_cast<float>(h);
+	return true;
+    }
+    return false;
 }
 
 void sync_panel_size_from_window(StickyPopupEntry& entry) {
-    int w = 0;
-    int h = 0;
-    SDL_GetWindowSize(entry.window, &w, &h);
-    entry.panel.width = static_cast<float>(std::max(w, static_cast<int>(kMinPanelW)));
-    entry.panel.height = static_cast<float>(std::max(h, static_cast<int>(kMinPanelH)));
+    float new_w = entry.panel.width;
+    float new_h = entry.panel.height;
+    if (!read_popup_render_size(entry, new_w, new_h)) {
+	return;
+    }
+    new_w = std::max(new_w, kMinPanelW);
+    new_h = std::max(new_h, kMinPanelH);
+    const bool size_changed = new_w != entry.panel.width || new_h != entry.panel.height;
+    entry.panel.width = new_w;
+    entry.panel.height = new_h;
+    if (size_changed) {
+	textbox_enforce_wrap(entry.panel.session, textbox_body_max_columns(entry.panel.width));
+	textbox_pin_viewport_to_start(entry.panel.viewport);
+    }
 }
 
 void destroy_entry(StickyPopupEntry& entry) {
@@ -117,8 +152,7 @@ bool handle_popup_mouse(StickyPopupManager& mgr, std::size_t index, const SDL_Ev
 	    const float new_w = std::max(kMinPanelW, event.motion.x);
 	    const float new_h = std::max(kMinPanelH, event.motion.y);
 	    SDL_SetWindowSize(entry.window, static_cast<int>(new_w), static_cast<int>(new_h));
-	    panel.width = new_w;
-	    panel.height = new_h;
+	    sync_panel_size_from_window(entry);
 	    return true;
 	}
 	return false;
@@ -136,6 +170,9 @@ bool handle_popup_mouse(StickyPopupManager& mgr, std::size_t index, const SDL_Ev
 
     if (event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
 	if (entry.dragging || entry.resizing) {
+	    if (entry.resizing) {
+		sync_panel_size_from_window(entry);
+	    }
 	    if (entry.dragging) {
 		float gx = 0.0f;
 		float gy = 0.0f;
@@ -204,9 +241,15 @@ bool handle_popup_keyboard(StickyPopupManager& mgr, std::size_t index, const SDL
 	return false;
     }
     StickyPopupEntry& entry = mgr.entries[index];
+    sync_panel_size_from_window(entry);
     bool quit = false;
-    return textbox_handle_sdl_event(entry.panel.session, event, quit,
-				    textbox_body_max_columns(entry.panel.width), false);
+    const bool handled = textbox_handle_sdl_event(entry.panel.session, event, quit,
+						  textbox_body_max_columns(entry.panel.width), false);
+    if (handled) {
+	textbox_scroll_to_cursor(entry.panel.viewport, entry.panel.session,
+				 textbox_visible_body_lines(entry.panel.height));
+    }
+    return handled;
 }
 } // namespace
 
@@ -240,10 +283,9 @@ bool sticky_popup_open(StickyPopupManager& mgr, StickyPanel panel, GuiThemeId th
     entry.renderer = renderer;
     entry.window_id = SDL_GetWindowID(window);
     entry.panel = std::move(panel);
-    entry.panel.width = static_cast<float>(w);
-    entry.panel.height = static_cast<float>(h);
     mgr.theme_id = theme;
     mgr.entries.push_back(std::move(entry));
+    sync_panel_size_from_window(mgr.entries.back());
     SDL_StartTextInput(window);
     return true;
 }
@@ -265,12 +307,14 @@ void sticky_popup_save_all(const StickyPopupManager& mgr) {
 
 void sticky_popup_render_all(StickyPopupManager& mgr) {
     const StickyGuiTheme theme = gui_theme_get(mgr.theme_id);
-    for (StickyPopupEntry& entry : mgr.entries) {
+	for (StickyPopupEntry& entry : mgr.entries) {
 	// Repainting while SDL_SetWindowPosition runs leaves compositor trails on
 	// borderless windows; the last frame moves with the window until drag ends.
 	if (entry.dragging) {
 	    continue;
 	}
+
+	sync_panel_size_from_window(entry);
 
 	SDL_SetRenderDrawColor(entry.renderer, theme.desk.r, theme.desk.g, theme.desk.b, theme.desk.a);
 	SDL_RenderClear(entry.renderer);

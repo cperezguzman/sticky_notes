@@ -25,6 +25,7 @@ import {
   type NoteJson,
 } from "./noteCodec.js";
 import { noteMatchesQuery } from "./noteSearch.js";
+import { rankContextHits, type ContextNoteHit } from "./sourceUrl.js";
 
 /** Lightweight row for the sidebar list (no body text). */
 export interface NoteIndexEntry {
@@ -98,6 +99,12 @@ export class NoteRepository {
 
     index.sort((a, b) => a.id - b.id);
     return index;
+  }
+
+  /** Notes whose source URL matches this page (exact) or its domain. */
+  async listByContext(pageUrl: string): Promise<ContextNoteHit[]> {
+    const all = await this.list();
+    return rankContextHits(all, pageUrl);
   }
 
   /** Load a single note by numeric id, or null if the file is missing / invalid. */

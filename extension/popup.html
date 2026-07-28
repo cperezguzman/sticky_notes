@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Sticky Notes Context</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Sticky Notes</h1>
+      <p id="page-url" class="muted"></p>
+    </header>
+
+    <section id="auth-panel" class="hidden">
+      <p class="lead">Sign in to the API so this extension can see your linked notes.</p>
+      <label>
+        Email / username
+        <input id="email" type="text" autocomplete="username" />
+      </label>
+      <label>
+        Password
+        <input id="password" type="password" autocomplete="current-password" />
+      </label>
+      <button id="login-btn" type="button">Sign in</button>
+      <p id="auth-error" class="error"></p>
+    </section>
+
+    <section id="main-panel" class="hidden">
+      <p id="status" class="muted"></p>
+      <ul id="note-list"></ul>
+      <div class="actions">
+        <button id="save-page-btn" type="button">New note for this page</button>
+        <button id="refresh-btn" type="button" class="ghost">Refresh</button>
+        <button id="options-btn" type="button" class="ghost">Options</button>
+        <button id="logout-btn" type="button" class="ghost">Sign out</button>
+      </div>
+      <p id="action-error" class="error"></p>
+    </section>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

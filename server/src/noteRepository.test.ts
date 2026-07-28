@@ -83,4 +83,17 @@ describe("NoteRepository", () => {
     assert.ok(cleared);
     assert.equal(cleared.sourceUrl, "");
   });
+
+  it("lists notes by page context (exact then domain)", async () => {
+    await repo.create("Exact", "a\n", "https://shop.example/item/1");
+    await repo.create("Domain", "b\n", "https://shop.example/other");
+    await repo.create("Other", "c\n", "https://elsewhere.test/");
+
+    const hits = await repo.listByContext("https://shop.example/item/1");
+    assert.equal(hits.length, 2);
+    assert.equal(hits[0].match, "exact");
+    assert.equal(hits[0].title, "Exact");
+    assert.equal(hits[1].match, "domain");
+    assert.equal(hits[1].title, "Domain");
+  });
 });

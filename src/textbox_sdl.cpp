@@ -5,6 +5,7 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 
 namespace {
@@ -107,6 +108,12 @@ std::size_t textbox_body_max_columns(float panel_width) {
     return max_body_columns(panel_width);
 }
 
+std::size_t textbox_visible_body_lines(float panel_height) {
+    const float title_bar_h = sticky_panel_title_bar_height();
+    const float body_h = std::max(panel_height - title_bar_h, kLineH);
+    return visible_body_lines(body_h);
+}
+
 bool textbox_handle_sdl_event(EditorSession& session, const SDL_Event& event, bool& quit_requested,
 			      std::size_t max_body_columns, bool quit_on_escape) {
     switch (event.type) {
@@ -171,8 +178,9 @@ void textbox_render_panel(SDL_Renderer* renderer, float x, float y, float width,
     SDL_RenderFillRect(renderer, &title_bar);
 
     gui_set_render_color(renderer, theme.title_text);
-    const char* title = chrome.title_text != nullptr ? chrome.title_text : panel_title(session).c_str();
-    SDL_RenderDebugText(renderer, x + kPadding, y + kPadding, title);
+    const std::string title =
+	chrome.title_text != nullptr ? chrome.title_text : panel_title(session);
+    SDL_RenderDebugText(renderer, std::floor(x + kPadding), std::floor(y + kPadding), title.c_str());
 
     if (chrome.show_close_button) {
 	float btn_x = 0.0f;
@@ -184,8 +192,8 @@ void textbox_render_panel(SDL_Renderer* renderer, float x, float y, float width,
 	gui_set_render_color(renderer, theme.close_btn);
 	SDL_RenderFillRect(renderer, &close_btn);
 	gui_set_render_color(renderer, theme.close_text);
-	const float glyph_x = btn_x + (btn_w - kCharW) * 0.5f;
-	SDL_RenderDebugText(renderer, glyph_x, btn_y, "x");
+	const float glyph_x = std::floor(btn_x + (btn_w - kCharW) * 0.5f);
+	SDL_RenderDebugText(renderer, glyph_x, std::floor(btn_y), "x");
     }
 
     if (chrome.show_dock_button) {
@@ -199,8 +207,8 @@ void textbox_render_panel(SDL_Renderer* renderer, float x, float y, float width,
 	gui_set_render_color(renderer, theme.close_btn);
 	SDL_RenderFillRect(renderer, &dock_btn);
 	gui_set_render_color(renderer, theme.close_text);
-	const float glyph_x = btn_x + (btn_w - kCharW) * 0.5f;
-	SDL_RenderDebugText(renderer, glyph_x, btn_y, "v");
+	const float glyph_x = std::floor(btn_x + (btn_w - kCharW) * 0.5f);
+	SDL_RenderDebugText(renderer, glyph_x, std::floor(btn_y), "v");
     }
 
     if (chrome.title_caret_visible) {
@@ -220,7 +228,8 @@ void textbox_render_panel(SDL_Renderer* renderer, float x, float y, float width,
     textbox_enforce_wrap(session, max_cols);
 
     const std::size_t visible = visible_body_lines(body_h);
-    textbox_scroll_to_cursor(viewport, session, visible);
+    // Resize pins to the start; do not chase the cursor here (that caused mid-note views).
+    textbox_clamp_viewport(viewport, session, visible);
 
     gui_set_render_color(renderer, theme.body_text);
     const std::size_t line_count = textbox_line_count(session);
@@ -229,15 +238,21 @@ void textbox_render_panel(SDL_Renderer* renderer, float x, float y, float width,
 
     for (std::size_t line_idx = first; line_idx < last; ++line_idx) {
 	const float row = static_cast<float>(line_idx - first);
-	const float text_y = body_y + kPadding + row * kLineH;
-	SDL_RenderDebugText(renderer, x + kPadding, text_y, textbox_line_at(session, line_idx).c_str());
+	const float text_x = std::floor(x + kPadding);
+	const float text_y = std::floor(body_y + kPadding + row * kLineH);
+	std::string line = textbox_line_at(session, line_idx);
+	if (line.size() > max_cols) {
+	    line.resize(max_cols);
+	}
+	SDL_RenderDebugText(renderer, text_x, text_y, line.c_str());
     }
 
     const std::size_t cursor_line = textbox_cursor_line(session);
     if (cursor_line >= first && cursor_line < last) {
 	const float row = static_cast<float>(cursor_line - first);
-	const float caret_y = body_y + kPadding + row * kLineH;
-	const float caret_x = x + kPadding + static_cast<float>(textbox_cursor_column(session)) * kCharW;
+	const float caret_y = std::floor(body_y + kPadding + row * kLineH);
+	const float caret_x =
+	    std::floor(x + kPadding + static_cast<float>(textbox_cursor_column(session)) * kCharW);
 	SDL_FRect caret{caret_x, caret_y, 2.0f, kLineH};
 	gui_set_render_color(renderer, theme.caret);
 	SDL_RenderFillRect(renderer, &caret);

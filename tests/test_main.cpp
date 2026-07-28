@@ -301,6 +301,103 @@ void test_textbox_reflow_on_widen() {
     check(session.note.text[1] == "z", "second paragraph preserved");
 }
 
+void test_textbox_word_boundary_wrap() {
+    EditorSession session{};
+    textbox_init_session(session);
+    const std::string phrase = "hello world again";
+    for (char c : phrase) {
+	textbox_apply_key(session, {TextboxKeyKind::Character, static_cast<char32_t>(c)}, 10);
+    }
+    check(session.note.text.size() >= 2, "phrase wraps onto multiple lines");
+    check(session.note.text[0] == "hello ", "wrap prefers break after space");
+    check(session.note.text[0].find(' ') != std::string::npos, "first soft line keeps trailing space");
+    for (const std::string& line : session.note.text) {
+	check(line.size() <= 10, "each soft line fits max columns");
+    }
+}
+
+void test_textbox_storage_lines_collapse_soft_wraps() {
+    EditorSession session{};
+    textbox_init_session(session);
+    for (char c : std::string("abcdefghi")) {
+	textbox_apply_key(session, {TextboxKeyKind::Character, static_cast<char32_t>(c)}, 3);
+    }
+    check(session.note.text.size() == 3, "soft wrap created multiple display lines");
+    const std::vector<std::string> stored = textbox_storage_lines(session);
+    check(stored.size() == 1, "storage collapses soft wraps to one paragraph");
+    check(stored[0] == "abcdefghi", "storage paragraph preserves characters");
+
+    textbox_apply_key(session, {TextboxKeyKind::Newline, 0}, 3);
+    textbox_apply_key(session, {TextboxKeyKind::Character, U'z'}, 3);
+    const std::vector<std::string> stored2 = textbox_storage_lines(session);
+    check(stored2.size() == 2, "hard Enter becomes a storage newline");
+    check(stored2[0] == "abcdefghi", "paragraph before Enter preserved");
+    check(stored2[1] == "z", "paragraph after Enter preserved");
+}
+
+void test_textbox_repair_persisted_soft_wraps() {
+    std::vector<std::string> lines = {
+	"Kind of li",
+	"ke linking notes",
+	"",
+	"Ex:",
+	"You made a sticky note to take down details of a future trip, so when you go back t",
+	"o the website that you were planning around, the sticky note pops up again.",
+    };
+    textbox_repair_persisted_soft_wraps(lines);
+    check(lines.size() == 4, "repair joins soft wraps but keeps blank/title breaks");
+    check(lines[0] == "Kind of like linking notes", "mid-word soft wrap rejoined");
+    check(lines[1].empty(), "blank line preserved as paragraph break");
+    check(lines[2] == "Ex:", "short title line not merged into following sentence");
+    check(lines[3].find("back to the website") != std::string::npos, "long wrapped sentence rejoined");
+
+    std::vector<std::string> spaced = {"smooth animation pop up.", " maybe even be able"};
+    textbox_repair_persisted_soft_wraps(spaced);
+    check(spaced.size() == 1, "leading-space continuation joins prior line");
+    check(spaced[0] == "smooth animation pop up. maybe even be able", "leading space kept as normal word space");
+}
+
+void test_textbox_viewport_resets_when_content_fits() {
+    EditorSession session{};
+    textbox_init_session(session);
+    for (int i = 0; i < 40; ++i) {
+	textbox_apply_key(session, {TextboxKeyKind::Character, U'a'}, 8);
+	textbox_apply_key(session, {TextboxKeyKind::Newline, 0}, 8);
+    }
+    session.current_line = session.note.text.size() - 1;
+    session.current_column = session.note.text.back().size();
+
+    TextboxViewport viewport{};
+    textbox_scroll_to_cursor(viewport, session, 5);
+    check(viewport.first_visible_line > 0, "narrow view scrolls down to keep cursor visible");
+
+    // Simulate widen/taller panel: more rows visible than total lines after reflow.
+    textbox_enforce_wrap(session, 80);
+    textbox_clamp_viewport(viewport, session, 80);
+    check(viewport.first_visible_line == 0, "when content fits after resize, viewport returns to top");
+    check(textbox_line_count(session) <= 80, "widened wrap fits in tall viewport");
+}
+
+void test_textbox_resize_pins_viewport_to_start() {
+    EditorSession session{};
+    textbox_init_session(session);
+    for (int i = 0; i < 30; ++i) {
+	textbox_apply_key(session, {TextboxKeyKind::Character, U'x'}, 6);
+	textbox_apply_key(session, {TextboxKeyKind::Newline, 0}, 6);
+    }
+    session.current_line = session.note.text.size() - 1;
+    session.current_column = 0;
+
+    TextboxViewport viewport{};
+    textbox_scroll_to_cursor(viewport, session, 4);
+    check(viewport.first_visible_line > 0, "typing follow scrolled away from start");
+
+    textbox_pin_viewport_to_start(viewport);
+    textbox_clamp_viewport(viewport, session, 4);
+    check(viewport.first_visible_line == 0, "smaller resize keeps showing the start of the note");
+    check(textbox_line_count(session) > 4, "note still taller than the small viewport");
+}
+
 void test_move_up_down() {
     EditorSession session{};
     write_to_current_line(session, "ab");
@@ -478,6 +575,11 @@ int main() {
     test_textbox_join_lines_on_backspace();
     test_textbox_wrap_long_line();
     test_textbox_reflow_on_widen();
+    test_textbox_word_boundary_wrap();
+    test_textbox_storage_lines_collapse_soft_wraps();
+    test_textbox_repair_persisted_soft_wraps();
+    test_textbox_viewport_resets_when_content_fits();
+    test_textbox_resize_pins_viewport_to_start();
     test_move_up_down();
     test_delete_note_file();
     test_sticky_gui_focus_raises_z_order();

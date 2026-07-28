@@ -8,7 +8,7 @@
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts",
     "migrate": "tsx src/migrate.ts",
-    "test": "tsx --test src/noteCodec.test.ts src/noteSearch.test.ts src/sourceUrl.test.ts src/noteRepository.test.ts src/auth/store.test.ts src/cloud/postgresNoteRepository.test.ts",
+    "test": "tsx --test src/noteCodec.test.ts src/noteSearch.test.ts src/sourceUrl.test.ts src/cors.test.ts src/auth/extensionSession.test.ts src/noteRepository.test.ts src/auth/store.test.ts src/cloud/postgresNoteRepository.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "engines": {

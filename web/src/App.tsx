@@ -34,6 +34,17 @@ type AuthState =
 
 type FormMode = "login" | "signup" | "check_email";
 
+function readNoteDeepLink(): string | number | null {
+  const raw = new URLSearchParams(window.location.search).get("note");
+  if (!raw) {
+    return null;
+  }
+  if (/^\d+$/.test(raw)) {
+    return Number.parseInt(raw, 10);
+  }
+  return raw;
+}
+
 export default function App() {
   const [auth, setAuth] = useState<AuthState>({ status: "loading" });
   const [formMode, setFormMode] = useState<FormMode>("login");
@@ -163,7 +174,11 @@ export default function App() {
     async (user: string | null, authRequired: boolean) => {
       setAuth({ status: "ready", user, authRequired });
       try {
-        await refreshList();
+        const prefer = readNoteDeepLink();
+        await refreshList(prefer);
+        if (prefer !== null) {
+          window.history.replaceState({}, "", window.location.pathname);
+        }
         setStatus(user ? `Signed in as ${user}` : "Ready (auth off)");
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {

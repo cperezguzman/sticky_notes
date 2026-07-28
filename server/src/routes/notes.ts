@@ -6,7 +6,7 @@ import { Router, type Request, type Response } from "express";
 
 import type { PostgresNoteRepository } from "../cloud/postgresNoteRepository.js";
 import type { NoteRepository } from "../noteRepository.js";
-import { normalizeSourceUrl } from "../sourceUrl.js";
+import { normalizeSourceUrl, sourceDomainFromUrl } from "../sourceUrl.js";
 
 function parseBodyFields(req: Request): {
   title?: string;
@@ -44,6 +44,21 @@ export function createNotesRouter(repo: NoteRepository): Router {
   router.get("/", async (req: Request, res: Response) => {
     const q = typeof req.query.q === "string" ? req.query.q : undefined;
     res.json(await repo.list(q));
+  });
+
+  router.get("/context", async (req: Request, res: Response) => {
+    const raw = typeof req.query.url === "string" ? req.query.url : "";
+    const normalized = normalizeSourceUrl(raw);
+    if (!normalized.ok || normalized.url === "") {
+      res.status(400).json({ error: "url must be a valid http(s) URL" });
+      return;
+    }
+    const notes = await repo.listByContext(normalized.url);
+    res.json({
+      url: normalized.url,
+      domain: sourceDomainFromUrl(normalized.url),
+      notes,
+    });
   });
 
   router.get("/:id", async (req: Request, res: Response) => {
@@ -134,6 +149,26 @@ export function createCloudNotesRouter(repo: PostgresNoteRepository): Router {
     }
     const q = typeof req.query.q === "string" ? req.query.q : undefined;
     res.json(await repo.list(uid, q));
+  });
+
+  router.get("/context", async (req: Request, res: Response) => {
+    const uid = userId(req);
+    if (!uid) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    const raw = typeof req.query.url === "string" ? req.query.url : "";
+    const normalized = normalizeSourceUrl(raw);
+    if (!normalized.ok || normalized.url === "") {
+      res.status(400).json({ error: "url must be a valid http(s) URL" });
+      return;
+    }
+    const notes = await repo.listByContext(uid, normalized.url);
+    res.json({
+      url: normalized.url,
+      domain: sourceDomainFromUrl(normalized.url),
+      notes,
+    });
   });
 
   router.get("/:id", async (req: Request, res: Response) => {
