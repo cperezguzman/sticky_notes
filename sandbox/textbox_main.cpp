@@ -1,5 +1,6 @@
 #include "sticky_gui.h"
 #include "sticky_popup.h"
+#include "text_font_render.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -55,12 +56,14 @@ int main(int argc, char* argv[]) {
 	return 1;
     }
 
-    SDL_Window* desk_window = SDL_CreateWindow("Sticky Notes", 960, 640, 0);
+    SDL_Window* desk_window = SDL_CreateWindow("Sticky Notes", 960, 640,
+					       SDL_WINDOW_BORDERLESS | SDL_WINDOW_RESIZABLE);
     if (desk_window == nullptr) {
 	std::cerr << "SDL_CreateWindow failed: " << SDL_GetError() << "\n";
 	SDL_Quit();
 	return 1;
     }
+    sticky_gui_install_desk_hit_test(desk_window);
 
     SDL_Renderer* desk_renderer = SDL_CreateRenderer(desk_window, nullptr);
     if (desk_renderer == nullptr) {
@@ -99,7 +102,7 @@ int main(int argc, char* argv[]) {
 			       sticky_gui_desk_color(gui).g, sticky_gui_desk_color(gui).b,
 			       sticky_gui_desk_color(gui).a);
 	SDL_RenderClear(desk_renderer);
-	sticky_gui_render(desk_renderer, gui);
+	sticky_gui_render(desk_renderer, gui, desk_window);
 	SDL_RenderPresent(desk_renderer);
 
 	sticky_popup_render_all(popups);
@@ -116,6 +119,7 @@ int main(int argc, char* argv[]) {
 
     sticky_popup_close_all(popups);
 
+    text_font_shutdown(desk_renderer);
     SDL_StopTextInput(desk_window);
     SDL_DestroyRenderer(desk_renderer);
     SDL_DestroyWindow(desk_window);

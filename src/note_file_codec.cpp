@@ -56,6 +56,38 @@ bool parse_note_file(std::ifstream& file, ParsedNoteFile& out) {
 		return false;
 	    }
 	    out.source_url = line;
+	} else if (part == "Font:") {
+	    if (!read_value_line()) {
+		return false;
+	    }
+	    out.font = line;
+	} else if (part == "FontSize:") {
+	    if (!read_value_line()) {
+		return false;
+	    }
+	    out.font_size = line;
+	} else if (part == "Styles:") {
+	    // Style runs until Body: (or EOF). Each non-empty line: start length flags
+	    while (file.peek() != EOF) {
+		const auto pos = file.tellg();
+		if (!std::getline(file, line)) {
+		    break;
+		}
+		strip_trailing_cr(line);
+		if (line == "Body:") {
+		    file.seekg(pos);
+		    break;
+		}
+		if (line.empty()) {
+		    continue;
+		}
+		// Stop if another section label appears
+		if (!line.empty() && line.back() == ':' && line.find(' ') == std::string::npos) {
+		    file.seekg(pos);
+		    break;
+		}
+		out.style_run_lines.push_back(line);
+	    }
 	} else if (part == "Body:") {
 	    std::ostringstream body;
 	    bool first = true;

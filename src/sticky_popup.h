@@ -15,6 +15,12 @@ struct StickyPopupEntry {
     StickyPanel panel;
     bool dragging = false;
     bool resizing = false;
+    bool body_scrollbar_dragging = false;
+    float body_scrollbar_drag_offset_y = 0.0f;
+    enum class FormatPicker { None, Font, Size } format_picker = FormatPicker::None;
+    std::size_t format_picker_cursor = 0;
+    bool show_theme_picker = false;
+    std::size_t theme_picker_cursor = 0;
     float drag_grab_offset_x = 0.0f;
     float drag_grab_offset_y = 0.0f;
     float drag_global_start_x = 0.0f;

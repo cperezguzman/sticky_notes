@@ -5,6 +5,9 @@
 #include "gui_theme.h"
 #include "sticky_gui.h"
 #include "sticky_note.h"
+#include "text_font.h"
+#include "text_font_render.h"
+#include "text_style.h"
 #include "textbox_input.h"
 #include "textbox_sdl.h"
 
@@ -12,6 +15,8 @@
 #include "test_notes_dir.h"
 
 #include <cassert>
+#include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -398,6 +403,170 @@ void test_textbox_resize_pins_viewport_to_start() {
     check(textbox_line_count(session) > 4, "note still taller than the small viewport");
 }
 
+void test_textbox_key_repeat_backspace_and_arrows() {
+    EditorSession session{};
+    textbox_init_session(session);
+    bool quit = false;
+    textbox_handle_sdl_event(session, sdl_test::text_input("abcd"), quit);
+    check(textbox_line_text(session) == "abcd", "seed text for repeat");
+
+    textbox_handle_sdl_event(session, sdl_test::key_down(SDL_SCANCODE_BACKSPACE, SDL_KMOD_NONE, true),
+			     quit);
+    textbox_handle_sdl_event(session, sdl_test::key_down(SDL_SCANCODE_BACKSPACE, SDL_KMOD_NONE, true),
+			     quit);
+    check(textbox_line_text(session) == "ab", "key-repeat backspace deletes multiple chars");
+
+    textbox_handle_sdl_event(session, sdl_test::key_down(SDL_SCANCODE_LEFT, SDL_KMOD_NONE, true),
+			     quit);
+    check(textbox_cursor_column(session) == 1, "key-repeat left moves cursor");
+}
+
+void test_textbox_key_repeat_character() {
+    EditorSession session{};
+    textbox_init_session(session);
+    bool quit = false;
+    textbox_handle_sdl_event(session, sdl_test::text_input("g"), quit);
+    textbox_handle_sdl_event(session, sdl_test::key_down(SDL_SCANCODE_G, SDL_KMOD_NONE, true), quit);
+    textbox_handle_sdl_event(session, sdl_test::key_down(SDL_SCANCODE_G, SDL_KMOD_NONE, true), quit);
+    check(textbox_line_text(session) == "ggg", "hold-to-type uses KEY_DOWN repeat for letters");
+}
+
+// Shift+arrow (and plain arrows) must not re-wrap; otherwise KEY_DOWN repeats backlog for seconds.
+void test_textbox_nav_repeat_stays_responsive() {
+    NoteTypography sans = note_typography_set_font(note_typography_default(), NoteFontId::Sans);
+    sans = note_typography_set_size(sans, 18);
+    EditorSession session{};
+    textbox_init_session(session);
+    session.note.typography = sans;
+    const float wrap_w = 220.0f;
+    const std::string seed(120, 'm');
+    for (char c : seed) {
+	textbox_apply_key_width(session, {TextboxKeyKind::Character, static_cast<char32_t>(c)}, wrap_w,
+				sans);
+    }
+    textbox_set_cursor(session, 0, 0);
+    const auto lines_before = session.note.text;
+    const auto t0 = std::chrono::steady_clock::now();
+    for (int i = 0; i < 200; ++i) {
+	textbox_apply_key_width(session, {TextboxKeyKind::Right, 0}, wrap_w, sans);
+    }
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::steady_clock::now() - t0)
+			.count();
+    check(ms < 50, "200 Right moves finish quickly without re-wrap backlog");
+    check(session.note.text == lines_before, "arrow navigation does not reflow soft wraps");
+    check(textbox_cursor_column(session) > 0 || textbox_cursor_line(session) > 0,
+	  "cursor advanced across the note");
+}
+
+void test_textbox_click_places_cursor() {
+    EditorSession session{};
+    textbox_init_session(session);
+    textbox_apply_key(session, {TextboxKeyKind::Character, U'a'}, 40);
+    textbox_apply_key(session, {TextboxKeyKind::Character, U'b'}, 40);
+    textbox_apply_key(session, {TextboxKeyKind::Character, U'c'}, 40);
+    textbox_apply_key(session, {TextboxKeyKind::Newline, 0}, 40);
+    textbox_apply_key(session, {TextboxKeyKind::Character, U'x'}, 40);
+    textbox_apply_key(session, {TextboxKeyKind::Character, U'y'}, 40);
+
+    TextboxViewport viewport{};
+    // Click just into column 1 on the first visible line (8px padding + glyphs).
+    textbox_click_body(session, viewport, 10, 8.0f + 8.0f + 1.0f, 8.0f + 1.0f, 8.0f, 8.0f, 8.0f);
+    check(textbox_cursor_line(session) == 0, "click selects first line");
+    check(textbox_cursor_column(session) == 1, "click selects column under the pointer");
+}
+
+void test_textbox_mouse_wheel_scrolls_viewport() {
+    EditorSession session{};
+    textbox_init_session(session);
+    for (int i = 0; i < 20; ++i) {
+	textbox_apply_key(session, {TextboxKeyKind::Character, U'z'}, 8);
+	textbox_apply_key(session, {TextboxKeyKind::Newline, 0}, 8);
+    }
+    TextboxViewport viewport{};
+    check(textbox_scroll_lines(viewport, session, 5, 3), "wheel down moves viewport");
+    check(viewport.first_visible_line == 3, "scrolled three lines down");
+    check(textbox_scroll_lines(viewport, session, 5, -10), "wheel up can reach the top");
+    check(viewport.first_visible_line == 0, "viewport clamped to start");
+}
+
+void test_textbox_body_scrollbar_jumps_viewport() {
+    EditorSession session{};
+    textbox_init_session(session);
+    for (int i = 0; i < 40; ++i) {
+	textbox_apply_key(session, {TextboxKeyKind::Character, U'a'}, 8);
+	textbox_apply_key(session, {TextboxKeyKind::Newline, 0}, 8);
+    }
+    TextboxViewport viewport{};
+    constexpr float kPanelW = 280.0f;
+    constexpr float kPanelH = 120.0f;
+    check(textbox_body_scrollbar_needed(session, kPanelH), "tall note needs body scrollbar");
+
+    float thumb_x = 0.0f;
+    float thumb_y = 0.0f;
+    float thumb_w = 0.0f;
+    float thumb_h = 0.0f;
+    textbox_body_scrollbar_thumb_rect(session, viewport, 0.0f, 0.0f, kPanelW, kPanelH, thumb_x,
+				      thumb_y, thumb_w, thumb_h);
+    float track_x = 0.0f;
+    float track_y = 0.0f;
+    float track_w = 0.0f;
+    float track_h = 0.0f;
+    textbox_body_scrollbar_track_rect(0.0f, 0.0f, kPanelW, kPanelH, track_x, track_y, track_w,
+				      track_h);
+    const float click_y = track_y + track_h - 2.0f;
+    textbox_scroll_body_from_thumb_y(session, viewport, 0.0f, 0.0f, kPanelW, kPanelH, click_y,
+				     thumb_h * 0.5f);
+    check(viewport.first_visible_line > 0, "scrollbar thumb jump scrolls body down");
+    check(textbox_set_first_visible(viewport, session, textbox_visible_body_lines(kPanelH), 0),
+	  "set_first_visible can return to top");
+}
+
+void test_proportional_font_advances_vary() {
+    NoteTypography sans = note_typography_set_font(note_typography_default(), NoteFontId::Sans);
+    sans = note_typography_set_size(sans, 18);
+    const float i_w = text_font_prefix_width(nullptr, sans, "i", 1, nullptr, 1);
+    const float m_w = text_font_prefix_width(nullptr, sans, "m", 1, nullptr, 1);
+    const float ii_w = text_font_prefix_width(nullptr, sans, "ii", 2, nullptr, 2);
+    check(i_w > 0.0f && m_w > 0.0f, "sans advances are positive");
+    check(m_w > i_w, "sans m is wider than i");
+    check(std::abs(ii_w - 2.0f * i_w) < 0.01f, "sans advances accumulate");
+}
+
+void test_textbox_proportional_width_wrap() {
+    NoteTypography sans = note_typography_set_font(note_typography_default(), NoteFontId::Sans);
+    sans = note_typography_set_size(sans, 18);
+    const float i10 = text_font_prefix_width(nullptr, sans, "iiiiiiiiii", 10, nullptr, 10);
+    const float m10 = text_font_prefix_width(nullptr, sans, "MMMMMMMMMM", 10, nullptr, 10);
+    check(m10 > i10, "wide run needs more width than narrow run");
+    const float wrap_w = (i10 + m10) * 0.5f;
+
+    EditorSession narrow{};
+    textbox_init_session(narrow);
+    narrow.note.typography = sans;
+    for (int i = 0; i < 10; ++i) {
+	textbox_apply_key_width(narrow, {TextboxKeyKind::Character, U'i'}, wrap_w, sans);
+    }
+    check(narrow.note.text.size() == 1, "ten i's fit in shared wrap width");
+
+    EditorSession wide{};
+    textbox_init_session(wide);
+    wide.note.typography = sans;
+    for (int i = 0; i < 10; ++i) {
+	textbox_apply_key_width(wide, {TextboxKeyKind::Character, U'M'}, wrap_w, sans);
+    }
+    check(wide.note.text.size() > 1, "ten M's wrap under the same width");
+    for (const std::string& line : wide.note.text) {
+	const float w =
+	    text_font_prefix_width(nullptr, sans, line.c_str(), line.size(), nullptr, line.size());
+	check(w <= wrap_w + 0.01f, "each soft line fits max width px");
+    }
+
+    textbox_enforce_wrap_width(wide, m10 + 1.0f, sans);
+    check(wide.note.text.size() == 1, "widening merges proportional soft wraps");
+    check(wide.note.text[0] == "MMMMMMMMMM", "merged wide paragraph preserved");
+}
+
 void test_move_up_down() {
     EditorSession session{};
     write_to_current_line(session, "ab");
@@ -531,6 +700,90 @@ void test_sticky_panel_chrome_sizes() {
     check(sticky_panel_close_button_width() > 0.0f, "close button width positive");
 }
 
+void test_note_typography_default_and_cycle() {
+    NoteTypography d = note_typography_default();
+    check(d.font == NoteFontId::Debug, "default font is Debug");
+    check(d.size_px == kDebugFontSizePx, "default size is 8");
+
+    NoteTypography sans = note_typography_cycle_font(d);
+    check(sans.font == NoteFontId::Sans, "cycle to Sans");
+    check(sans.size_px == kSansDefaultSizePx, "Sans default size after Debug");
+
+    NoteTypography serif = note_typography_cycle_font(sans);
+    check(serif.font == NoteFontId::Serif, "cycle to Serif");
+
+    NoteTypography back = d;
+    for (int i = 0; i < kNoteFontCount; ++i) {
+	back = note_typography_cycle_font(back);
+    }
+    check(back.font == NoteFontId::Debug, "full cycle returns to Debug");
+    check(back.size_px == kDebugFontSizePx, "Debug size forced to 8");
+
+    NoteTypography bigger = note_typography_adjust_size(sans, 1);
+    check(bigger.size_px == 18, "Sans size steps to next preset");
+    NoteTypography clamped = note_typography_adjust_size(sans, 100);
+    check(clamped.size_px == kSansMaxSizePx, "Sans size clamps to max");
+    NoteTypography debug_noop = note_typography_adjust_size(d, 1);
+    check(debug_noop.size_px == kDebugFontSizePx, "Debug ignores size adjust");
+
+    NoteTypography times = note_typography_set_font(d, NoteFontId::Times);
+    check(times.font == NoteFontId::Times, "set Times font");
+    NoteFontId pid = NoteFontId::Debug;
+    check(note_font_id_from_string("papyrus", pid) && pid == NoteFontId::Papyrus, "papyrus parses");
+    check(note_font_id_from_string("artdeco", pid) && pid == NoteFontId::ArtDeco, "artdeco parses");
+}
+
+void test_note_styles_runs_roundtrip() {
+    NoteStyles styles{};
+    std::vector<std::string> text{"hello", "world"};
+    note_styles_ensure(styles, text);
+    note_styles_apply_flag_range(styles, text, 0, 0, 0, 5, TextStyleBold, true);
+    note_styles_apply_flag_range(styles, text, 1, 0, 1, 5, TextStyleItalic, true);
+    const auto runs = note_styles_to_runs(styles, text);
+    check(!runs.empty(), "styled text produces runs");
+
+    NoteStyles loaded{};
+    note_styles_from_runs(loaded, text, runs);
+    check(note_style_at(loaded, 0, 0) & TextStyleBold, "bold restored");
+    check(note_style_at(loaded, 1, 0) & TextStyleItalic, "italic restored");
+}
+
+void test_editor_selection_and_style_toggle() {
+    EditorSession session{};
+    textbox_init_session(session);
+    insert_at_cursor(session, "abcdef");
+    session.sel_anchor_line = 0;
+    session.sel_anchor_column = 1;
+    session.current_line = 0;
+    session.current_column = 4;
+    session.has_selection = true;
+    editor_toggle_style_flag(session, TextStyleUnderline);
+    check(note_style_at(session.note.styles, 0, 1) & TextStyleUnderline, "selection underlined");
+    check((note_style_at(session.note.styles, 0, 0) & TextStyleUnderline) == 0, "outside not underlined");
+    editor_delete_selection(session);
+    check(textbox_line_text(session) == "aef", "selection deleted");
+}
+
+void test_parse_note_file_font_fields() {
+    test_notes::TempNotesDir dir;
+    {
+	std::ofstream out("notes/_tmp_font_note.txt");
+	out << "Title:\nFonty\nID:\n99901\nCreated:\n2026-01-01 00:00:00\n"
+	       "Last Edited:\n2026-01-01 00:00:00\nFont:\nsans\nFontSize:\n20\nBody:\nhi\n";
+    }
+    std::ifstream in("notes/_tmp_font_note.txt");
+    ParsedNoteFile parsed{};
+    check(parse_note_file(in, parsed), "font note parses");
+    check(parsed.font == "sans", "parsed Font value");
+    check(parsed.font_size == "20", "parsed FontSize value");
+
+    sticky_note sn{};
+    check(load_note_from_path(sn, "notes/_tmp_font_note.txt"), "load font note");
+    check(sn.typography.font == NoteFontId::Sans, "loaded Sans font");
+    check(sn.typography.size_px == 20 || sn.typography.size_px == 18 || sn.typography.size_px == 24,
+	  "loaded Sans size nearest preset");
+}
+
 void test_gui_theme_persistence() {
     test_notes::TempNotesDir dir;
     check(gui_theme_load_persisted() == GuiThemeId::Minimal, "missing theme file defaults minimal");
@@ -580,6 +833,14 @@ int main() {
     test_textbox_repair_persisted_soft_wraps();
     test_textbox_viewport_resets_when_content_fits();
     test_textbox_resize_pins_viewport_to_start();
+    test_textbox_key_repeat_backspace_and_arrows();
+    test_textbox_key_repeat_character();
+    test_textbox_nav_repeat_stays_responsive();
+    test_textbox_click_places_cursor();
+    test_textbox_mouse_wheel_scrolls_viewport();
+    test_textbox_body_scrollbar_jumps_viewport();
+    test_proportional_font_advances_vary();
+    test_textbox_proportional_width_wrap();
     test_move_up_down();
     test_delete_note_file();
     test_sticky_gui_focus_raises_z_order();
@@ -591,6 +852,10 @@ int main() {
     test_textbox_sdl_delete_key();
     test_sticky_panel_chrome_sizes();
     test_gui_theme_persistence();
+    test_note_typography_default_and_cycle();
+    test_note_styles_runs_roundtrip();
+    test_editor_selection_and_style_toggle();
+    test_parse_note_file_font_fields();
 
     if (failures == 0) {
 	std::cout << "All tests passed.\n";

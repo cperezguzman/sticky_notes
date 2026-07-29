@@ -14,6 +14,7 @@ inline SDL_Event key_down(SDL_Scancode scancode, SDL_Keymod mod = SDL_KMOD_NONE,
     event.key.scancode = scancode;
     event.key.mod = mod;
     event.key.repeat = repeat;
+    event.key.key = SDL_GetKeyFromScancode(scancode, mod, false);
     return event;
 }
 
@@ -58,6 +59,16 @@ inline SDL_Event mouse_motion(float x, float y) {
     event.type = SDL_EVENT_MOUSE_MOTION;
     event.motion.x = x;
     event.motion.y = y;
+    return event;
+}
+
+inline SDL_Event mouse_wheel(float x, float y, float wheel_y) {
+    SDL_Event event{};
+    event.type = SDL_EVENT_MOUSE_WHEEL;
+    event.wheel.x = 0.0f;
+    event.wheel.y = wheel_y;
+    event.wheel.mouse_x = x;
+    event.wheel.mouse_y = y;
     return event;
 }
 

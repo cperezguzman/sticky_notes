@@ -12,6 +12,9 @@ struct ParsedNoteFile {
     std::string created_line;
     std::string last_edited_line;
     std::string source_url; // optional; empty when unset
+    std::string font;	    // optional; empty => debug
+    std::string font_size;  // optional; empty => default for font
+    std::vector<std::string> style_run_lines; // optional Styles: payload lines
     std::string body;
 };
 

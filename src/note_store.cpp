@@ -1,6 +1,8 @@
 #include "note_store.h"
 
 #include "note_file_codec.h"
+#include "text_font.h"
+#include "text_style.h"
 
 #include <chrono>
 #include <filesystem>
@@ -10,6 +12,35 @@
 #include <unordered_map>
 
 namespace {
+void write_typography_fields(std::ofstream& out, const sticky_note& sn) {
+    const NoteTypography typo = note_typography_normalize(sn.typography);
+    out << "Font:\n" << note_font_id_to_string(typo.font) << "\n";
+    out << "FontSize:\n" << typo.size_px << "\n";
+}
+
+void write_styles_fields(std::ofstream& out, const sticky_note& sn) {
+    const std::vector<StyleRun> runs = note_styles_to_runs(sn.styles, sn.text);
+    if (runs.empty()) {
+	return;
+    }
+    out << "Styles:\n";
+    for (const StyleRun& run : runs) {
+	out << run.start << ' ' << run.length << ' ' << note_styles_flags_to_string(run.flags)
+	    << '\n';
+    }
+}
+
+void apply_parsed_styles(sticky_note& sn, const ParsedNoteFile& parsed) {
+    std::vector<StyleRun> runs;
+    for (const std::string& line : parsed.style_run_lines) {
+	StyleRun run{};
+	if (note_styles_parse_run_line(line, run)) {
+	    runs.push_back(run);
+	}
+    }
+    note_styles_from_runs(sn.styles, sn.text, runs);
+}
+
 void set_noteid(sticky_note& sn, std::string& count) {
     const std::string note_path = "notes/note_" + count + ".txt";
     sn.note_path = note_path;
@@ -33,6 +64,8 @@ void write_new_note_file(const sticky_note& sn) {
     if (!sn.source_url.empty()) {
 	out << "Source:\n" << sn.source_url << "\n";
     }
+    write_typography_fields(out, sn);
+    write_styles_fields(out, sn);
     out << "Body:\n";
     for (const auto& t : sn.text) {
 	out << t << "\n";
@@ -53,7 +86,21 @@ bool apply_parsed_note(sticky_note& sn, const ParsedNoteFile& parsed, const std:
     }
     sn.note_path = path;
     sn.source_url = parsed.source_url;
+    sn.typography = note_typography_default();
+    NoteFontId font_id = NoteFontId::Debug;
+    if (!parsed.font.empty() && note_font_id_from_string(parsed.font, font_id)) {
+	sn.typography.font = font_id;
+    }
+    if (!parsed.font_size.empty()) {
+	try {
+	    sn.typography.size_px = std::stoi(parsed.font_size);
+	} catch (const std::exception&) {
+	    // keep default size for font
+	}
+    }
+    sn.typography = note_typography_normalize(sn.typography);
     sn.text = body_lines_from_parsed(parsed);
+    apply_parsed_styles(sn, parsed);
 
     const auto now = std::chrono::system_clock::now();
     sn.created = now;
@@ -161,6 +208,8 @@ void save_note(const sticky_note& sn) {
     if (!sn.source_url.empty()) {
 	out << "Source:\n" << sn.source_url << "\n";
     }
+    write_typography_fields(out, sn);
+    write_styles_fields(out, sn);
     out << "Body:\n";
     for (const auto& t : sn.text) {
 	out << t << "\n";

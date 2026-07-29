@@ -194,14 +194,11 @@ void scenario_body_reflows_when_panel_widened() {
     const std::size_t lines_before = sticky_gui_focused_note(gui).text.size();
     check(lines_before >= 2, "long line wraps across multiple rows when narrow");
 
-    StickyPanelHitTargets hit{};
-    sticky_gui_panel_hit_targets(sticky_gui_panel_at(gui, 0), hit);
-    gui_event(gui, sdl_test::mouse_button_down(hit.grip_x, hit.grip_y), quit);
-    gui_event(gui, sdl_test::mouse_motion(hit.grip_x + 240.0f, hit.grip_y), quit);
-    gui_event(gui, sdl_test::mouse_button_up(hit.grip_x + 240.0f, hit.grip_y), quit);
-
-    check(sticky_gui_panel_at(gui, 0).width > start_w + 100.0f, "resize grip widens panel");
+    // Desk notes are not grip-resized; widen the panel and reflow like a window expand.
+    gui.panels[0].width = start_w + 240.0f;
     sticky_gui_reflow_panel(gui, 0);
+
+    check(sticky_gui_panel_at(gui, 0).width > start_w + 100.0f, "wider desk panel width applied");
 
     const std::size_t lines_after = sticky_gui_focused_note(gui).text.size();
     check(lines_after < lines_before, "widened panel merges soft-wrapped lines");
@@ -218,12 +215,13 @@ void scenario_focus_panel_by_click() {
     test_notes::TempNotesDir dir;
     StickyGui gui{};
     sticky_gui_reset(gui);
-    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(0, "Back", "a"), 40.0f, 40.0f);
-    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(1, "Front", "b"), 200.0f, 200.0f);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(0, "Back", "a"), 240.0f, 80.0f);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(1, "Front", "b"), 400.0f, 200.0f);
 
     bool quit = false;
-    gui_event(gui, sdl_test::mouse_button_down(60.0f, 60.0f), quit);
-    gui_event(gui, sdl_test::mouse_button_up(60.0f, 60.0f), quit);
+    // Click body of Back (right of sidebar / below title bar).
+    gui_event(gui, sdl_test::mouse_button_down(260.0f, 120.0f), quit);
+    gui_event(gui, sdl_test::mouse_button_up(260.0f, 120.0f), quit);
 
     check(sticky_gui_focused_note(gui).title == "Back", "click back panel focuses it");
     check(!quit, "focus click does not quit");
@@ -412,7 +410,7 @@ void scenario_max_eight_panels() {
     check(sticky_gui_panel_count(gui) == 1, "ctrl+n replaces desk with new blank panel");
 }
 
-void scenario_drag_title_bar_moves_panel() {
+void scenario_desk_title_does_not_drag_panel() {
     test_notes::TempNotesDir dir;
     StickyGui gui{};
     sticky_gui_reset(gui);
@@ -422,21 +420,17 @@ void scenario_drag_title_bar_moves_panel() {
     sticky_gui_panel_hit_targets(sticky_gui_panel_at(gui, 0), hit);
     const float start_x = sticky_gui_panel_at(gui, 0).x;
     const float start_y = sticky_gui_panel_at(gui, 0).y;
-    const float drag_off_x = hit.title_x - start_x;
-    const float drag_off_y = hit.title_y - start_y;
-    const float target_x = start_x + 80.0f;
-    const float target_y = start_y + 60.0f;
 
     bool quit = false;
     gui_event(gui, sdl_test::mouse_button_down(hit.title_x, hit.title_y), quit);
-    gui_event(gui, sdl_test::mouse_motion(target_x + drag_off_x, target_y + drag_off_y), quit);
-    gui_event(gui, sdl_test::mouse_button_up(target_x + drag_off_x, target_y + drag_off_y), quit);
+    gui_event(gui, sdl_test::mouse_motion(hit.title_x + 80.0f, hit.title_y + 60.0f), quit);
+    gui_event(gui, sdl_test::mouse_button_up(hit.title_x + 80.0f, hit.title_y + 60.0f), quit);
 
     const StickyPanel& panel = sticky_gui_panel_at(gui, sticky_gui_focused_index(gui));
-    check(panel.x == target_x && panel.y == target_y, "drag title bar moves panel");
+    check(panel.x == start_x && panel.y == start_y, "desk note title does not drag panel");
 }
 
-void scenario_resize_grip_expands_panel() {
+void scenario_desk_note_does_not_resize() {
     test_notes::TempNotesDir dir;
     StickyGui gui{};
     sticky_gui_reset(gui);
@@ -451,7 +445,60 @@ void scenario_resize_grip_expands_panel() {
     gui_event(gui, sdl_test::mouse_motion(hit.grip_x + 40.0f, hit.grip_y + 30.0f), quit);
     gui_event(gui, sdl_test::mouse_button_up(hit.grip_x + 40.0f, hit.grip_y + 30.0f), quit);
 
-    check(sticky_gui_panel_at(gui, 0).width > start_w, "resize grip increases panel width");
+    check(sticky_gui_panel_at(gui, 0).width == start_w, "desk note grip does not resize");
+}
+
+void scenario_sidebar_wheel_scrolls_list() {
+    test_notes::TempNotesDir dir;
+    for (int i = 0; i < 12; ++i) {
+	test_notes::write_note_file(i, "N" + std::to_string(i), "body\n");
+    }
+
+    StickyGui gui{};
+    sticky_gui_init(gui);
+    gui.desk_h = 200.0f; // short window so the note list overflows
+    check(sticky_gui_sidebar_entry_count(gui) == 12, "sidebar has many notes");
+    check(gui.sidebar_scroll == 0, "sidebar starts at top");
+
+    bool quit = false;
+    gui_event(gui, sdl_test::mouse_wheel(40.0f, 100.0f, -1.0f), quit);
+    check(gui.sidebar_scroll > 0, "wheel over sidebar scrolls note list");
+
+    const std::size_t mid = gui.sidebar_scroll;
+    gui_event(gui, sdl_test::mouse_wheel(40.0f, 100.0f, 1.0f), quit);
+    check(gui.sidebar_scroll < mid, "wheel up scrolls sidebar toward top");
+}
+
+void scenario_note_body_scrollbar_scrolls() {
+    test_notes::TempNotesDir dir;
+    StickyGui gui{};
+    sticky_gui_reset(gui);
+    sticky_gui_add_panel_from_note(gui, test_notes::make_note_on_disk(72, "Tall", ""), 240.0f, 40.0f);
+    gui.panels[0].width = 280.0f;
+    gui.panels[0].height = 120.0f;
+
+    bool quit = false;
+    for (int i = 0; i < 40; ++i) {
+	gui_type(gui, "a", quit);
+	gui_event(gui, sdl_test::key_down(SDL_SCANCODE_RETURN), quit);
+    }
+    check(textbox_body_scrollbar_needed(gui.panels[0].session, gui.panels[0].height),
+	  "long note shows body scrollbar");
+
+    // Cursor follow leaves the view near the bottom; jump toward the top via the track.
+    textbox_pin_viewport_to_start(gui.panels[0].viewport);
+    float track_x = 0.0f;
+    float track_y = 0.0f;
+    float track_w = 0.0f;
+    float track_h = 0.0f;
+    const StickyPanel& panel = gui.panels[0];
+    textbox_body_scrollbar_track_rect(panel.x, panel.y, panel.width, panel.height, track_x, track_y,
+				      track_w, track_h);
+    const float click_x = track_x + track_w * 0.5f;
+    const float click_y = track_y + track_h - 4.0f;
+    gui_event(gui, sdl_test::mouse_button_down(click_x, click_y), quit);
+    gui_event(gui, sdl_test::mouse_button_up(click_x, click_y), quit);
+    check(gui.panels[0].viewport.first_visible_line > 0, "body scrollbar click scrolls note");
 }
 
 void scenario_close_button_saves_and_removes() {
@@ -685,8 +732,10 @@ int main() {
     scenario_help_overlay_blocks_body_input();
     scenario_ctrl_n_creates_note_file();
     scenario_max_eight_panels();
-    scenario_drag_title_bar_moves_panel();
-    scenario_resize_grip_expands_panel();
+    scenario_desk_title_does_not_drag_panel();
+    scenario_desk_note_does_not_resize();
+    scenario_sidebar_wheel_scrolls_list();
+    scenario_note_body_scrollbar_scrolls();
     scenario_close_button_saves_and_removes();
     scenario_save_all_on_quit_path();
     scenario_esc_requests_quit();

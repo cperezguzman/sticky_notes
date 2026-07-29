@@ -5,20 +5,20 @@ SDL3_PREFIX ?= $(CURDIR)/third_party/sdl3-install
 SDL3_CFLAGS  = -Isrc -I$(SDL3_PREFIX)/include
 SDL3_LIBS    = -L$(SDL3_PREFIX)/lib -Wl,-rpath,$(SDL3_PREFIX)/lib -lSDL3
 
-SRCS     = src/main.cpp src/parser.cpp src/note_file_codec.cpp src/sticky_note.cpp src/note_store.cpp src/note_editor.cpp src/note_editor_cli.cpp
-HEADERS  = src/sticky_note.h src/parser.h src/note_file_codec.h src/note_store.h src/note_editor.h src/note_editor_cli.h src/textbox_input.h
-
-TEST_SRCS = tests/test_main.cpp src/parser.cpp src/note_file_codec.cpp src/sticky_note.cpp \
-	src/note_editor.cpp src/note_store.cpp src/textbox_input.cpp src/sticky_gui.cpp \
-	src/textbox_sdl.cpp src/gui_theme.cpp
-
-HARNESS_SRCS = tests/textbox_harness.cpp src/sticky_gui.cpp src/textbox_input.cpp src/textbox_sdl.cpp \
-	src/gui_theme.cpp src/note_editor.cpp src/sticky_note.cpp src/note_store.cpp \
-	src/note_file_codec.cpp src/parser.cpp
+SRCS     = src/main.cpp src/parser.cpp src/note_file_codec.cpp src/sticky_note.cpp src/note_store.cpp src/note_editor.cpp src/note_editor_cli.cpp src/text_font.cpp src/text_style.cpp
+HEADERS  = src/sticky_note.h src/parser.h src/note_file_codec.h src/note_store.h src/note_editor.h src/note_editor_cli.h src/textbox_input.h src/text_font.h src/text_style.h
 
 TEXTBOX_SRCS = sandbox/textbox_main.cpp src/sticky_gui.cpp src/sticky_popup.cpp src/textbox_input.cpp src/textbox_sdl.cpp \
 	src/gui_theme.cpp src/note_editor.cpp src/sticky_note.cpp src/note_store.cpp \
-	src/note_file_codec.cpp src/parser.cpp
+	src/note_file_codec.cpp src/parser.cpp src/text_font.cpp src/text_font_render.cpp src/text_style.cpp
+
+TEST_SRCS = tests/test_main.cpp src/parser.cpp src/note_file_codec.cpp src/sticky_note.cpp \
+	src/note_editor.cpp src/note_store.cpp src/textbox_input.cpp src/sticky_gui.cpp \
+	src/textbox_sdl.cpp src/gui_theme.cpp src/text_font.cpp src/text_font_render.cpp src/text_style.cpp
+
+HARNESS_SRCS = tests/textbox_harness.cpp src/sticky_gui.cpp src/textbox_input.cpp src/textbox_sdl.cpp \
+	src/gui_theme.cpp src/note_editor.cpp src/sticky_note.cpp src/note_store.cpp \
+	src/note_file_codec.cpp src/parser.cpp src/text_font.cpp src/text_font_render.cpp src/text_style.cpp
 
 .PHONY: all clean test smoke textbox textbox-smoke sdl3 gui desktop setup docker docker-cli docker-gui docker-build
 

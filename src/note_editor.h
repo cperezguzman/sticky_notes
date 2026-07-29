@@ -12,14 +12,17 @@
 #include "sticky_note.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
 struct EditorSnapshot {
     std::vector<std::string> text;
     std::vector<bool> hard_line_break_after;
+    NoteStyles styles;
     std::size_t current_line = 0;
     std::size_t current_column = 0;
+    uint8_t typing_style = 0;
 };
 
 struct EditorSession {
@@ -28,6 +31,12 @@ struct EditorSession {
     std::size_t current_line = 0;
     // 0-based column within the line; may equal line.length() (insert after last char).
     std::size_t current_column = 0;
+    // Selection anchor; active when has_selection is true.
+    std::size_t sel_anchor_line = 0;
+    std::size_t sel_anchor_column = 0;
+    bool has_selection = false;
+    // Style flags applied to newly typed characters.
+    uint8_t typing_style = 0;
     // hard_line_break_after[i] == true: user pressed Enter after line i (not soft wrap).
     std::vector<bool> hard_line_break_after;
     std::vector<EditorSnapshot> undo_stack;
@@ -107,6 +116,21 @@ bool find_next(EditorSession& session);
 EditStatus yank_line(EditorSession& session);
 
 EditStatus paste_line(EditorSession& session);
+
+void editor_clear_selection(EditorSession& session);
+
+void editor_set_selection_anchor_to_cursor(EditorSession& session);
+
+void editor_get_normalized_selection(const EditorSession& session, std::size_t& a_line,
+				     std::size_t& a_col, std::size_t& b_line, std::size_t& b_col);
+
+bool editor_selection_active(const EditorSession& session);
+
+EditStatus editor_delete_selection(EditorSession& session);
+
+void editor_toggle_style_flag(EditorSession& session, uint8_t flag);
+
+uint8_t editor_active_style_flags(const EditorSession& session);
 
 std::string format_cursor_position(const EditorSession& session);
 
